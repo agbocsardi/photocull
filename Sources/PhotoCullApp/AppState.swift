@@ -30,7 +30,6 @@ enum Modal: Identifiable, Equatable {
     case finalize(date: String)
     case globalFinalize
     case ingest
-    case settings
 
     var id: String {
         switch self {
@@ -38,7 +37,6 @@ enum Modal: Identifiable, Equatable {
         case .finalize(let date): return "finalize-\(date)"
         case .globalFinalize: return "globalFinalize"
         case .ingest: return "ingest"
-        case .settings: return "settings"
         }
     }
 }
@@ -159,6 +157,7 @@ final class AppState: ObservableObject {
 
     @Published var finalizeStats: [FinalizeStats] = []
     @Published var cropExportMode: CropExportMode = .applyCrop
+    /// Applies the `[finalize]` default until the finalize sheet overrides it.
     enum BulkOperation: Equatable { case preparing(UUID), finalize(UUID), ingest(UUID), repair(UUID) }
     @Published private(set) var bulkOperation: BulkOperation?
     private struct PreparedFinalize {
@@ -213,6 +212,7 @@ final class AppState: ObservableObject {
         self.fixtureMode = fixtureMode
         self.operationHooks = operationHooks
         self.cfg = cfg ?? PCConfig.load()
+        cropExportMode = self.cfg.finalize.cropExportMode
         if initializeAppearance && !fixtureMode {
             let saved = UserDefaults.standard.string(forKey: Self.appearanceKey) ?? "system"
             appearance = AppAppearance(rawValue: saved) ?? .system
@@ -302,6 +302,40 @@ final class AppState: ObservableObject {
         session = nil
         info = PhotoInfo()
         imageLoader.load(url: nil, maxPixel: 0)
+    }
+
+    // MARK: - Settings
+
+    /// Apply a new configuration chosen in the settings window: persist the
+    /// active session, create the folders it names, save the config file, and
+    /// reload the library from the new locations. Nothing on disk is moved —
+    /// repointing a folder only changes where PhotoCull looks. Refused in
+    /// fixture mode and while a bulk file operation runs.
+    func updateConfig(_ new: PCConfig) -> Bool {
+        guard permitsOrdinaryIO() else { return false }
+        guard bulkOperation == nil else { toastMessage("Wait for the file operation to finish"); return false }
+        guard flushPersist() else { return false }
+        do {
+            for path in [new.paths.inbox, new.paths.archive, new.paths.dump] {
+                try FileManager.default.createDirectory(atPath: PCConfig.expandHome(path),
+                                                        withIntermediateDirectories: true)
+            }
+            try new.save()
+        } catch {
+            fail("Could not apply settings: \(error.localizedDescription)")
+            return false
+        }
+        var applied = new
+        applied.paths.inbox = PCConfig.expandHome(applied.paths.inbox)
+        applied.paths.archive = PCConfig.expandHome(applied.paths.archive)
+        applied.paths.dump = PCConfig.expandHome(applied.paths.dump)
+        clearActiveSession()
+        cfg = applied
+        cropExportMode = applied.finalize.cropExportMode
+        reloadLibrary()
+        if let first = sessions.first { open(date: first.date) }
+        toastMessage("Settings applied")
+        return true
     }
 
     // MARK: - Session loading
@@ -803,7 +837,7 @@ final class AppState: ObservableObject {
             do {
                 let result = try await Self.onNativeQueue {
                     try hooks?.boundary?("finalizeBefore", token)
-                    let result = try Finalize.runMulti(cfg: cfg, dates: dates, dump: true, cropMode: exportMode,
+                    let result = try Finalize.runMulti(cfg: cfg, dates: dates, dump: cfg.finalize.exportJPGs, cropMode: exportMode,
                                                         hooks: hooks?.finalize ?? FinalizeHooks())
                     try hooks?.boundary?("finalizeAfter", token)
                     return result
@@ -1055,7 +1089,7 @@ final class AppState: ObservableObject {
             if key.chars == "y" || key.isReturn { confirmFinalize(); return true }
             if key.chars == "n" || key.isEscape { self.modal = nil; return true }
             return false
-        case .ingest, .settings:
+        case .ingest:
             if key.isEscape && !ingestProgress.running { self.modal = nil; return true }
             return false
         }

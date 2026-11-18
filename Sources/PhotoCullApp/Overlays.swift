@@ -199,19 +199,30 @@ struct FinalizeSheet: View {
                         .foregroundStyle(Palette.warning)
                 }
 
-                SheetGroup(title: "Copies to \(app.cfg.paths.dump.replacingOccurrences(of: NSHomeDirectory(), with: "~"))") {
-                    Picker("", selection: $app.cropExportMode) {
-                        Text("Keep JPGs with the crop applied")
-                            .help("Apply saved crops to exported copies; originals stay unchanged")
-                            .tag(CropExportMode.applyCrop)
-                        Text("Keep the original JPGs")
-                            .help("Export full-frame JPG copies without applying saved crops")
-                            .tag(CropExportMode.original)
+                SheetGroup(title: app.cfg.finalize.exportJPGs
+                           ? "Copies to \(PCConfig.abbreviateHome(app.cfg.paths.dump))"
+                           : "Copies") {
+                    if app.cfg.finalize.exportJPGs {
+                        Picker("", selection: $app.cropExportMode) {
+                            Text("Keep JPGs with the crop applied")
+                                .help("Apply saved crops to exported copies; originals stay unchanged")
+                                .tag(CropExportMode.applyCrop)
+                            Text("Keep the original JPGs")
+                                .help("Export full-frame JPG copies without applying saved crops")
+                                .tag(CropExportMode.original)
+                        }
+                        .pickerStyle(.radioGroup)
+                        .labelsHidden()
+                        .font(Typo.callout)
+                        .help("Crop settings affect only exported JPG copies, not the originals")
+                    } else {
+                        Label("No keeper JPG copies will be made — export is switched off in Settings. " +
+                              "Finalize will only archive keepers and trash rejects.",
+                              systemImage: "tray")
+                            .font(Typo.callout)
+                            .foregroundStyle(Palette.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    .pickerStyle(.radioGroup)
-                    .labelsHidden()
-                    .font(Typo.callout)
-                    .help("Crop settings affect only exported JPG copies, not the originals")
                 }
             }
         } buttons: {

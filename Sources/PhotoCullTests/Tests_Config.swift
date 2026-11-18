@@ -45,10 +45,13 @@ func suiteConfig() throws {
     checkEqual(roundTrip["paths"]?["inbox"], TOMLValue.string("~/Pictures/PhotoCull/inbox"), "round-trip inbox")
     checkEqual(roundTrip["paths"]?["archive"], TOMLValue.string("~/Pictures/PhotoCull/archive"), "round-trip archive")
     checkEqual(roundTrip["paths"]?["dump"], TOMLValue.string("~/Downloads"), "round-trip dump")
-    checkEqual(roundTrip["files"]?["raw_extensions"], TOMLValue.array(["RAF", "RW2"]), "round-trip raw exts")
+    checkEqual(roundTrip["files"]?["raw_extensions"],
+               TOMLValue.array(["RAF", "RW2", "CR2", "CR3", "NEF", "ARW", "DNG", "ORF", "PEF"]),
+               "round-trip raw exts")
     checkEqual(roundTrip["files"]?["jpg_extensions"], TOMLValue.array(["JPG", "JPEG"]), "round-trip jpg exts")
 
-    // ── toTOML matches Go's BurntSushi marshal byte-for-byte ──
+    // ── toTOML matches the expected default file shape (broadened RAW list
+    // and a [finalize] section are deliberate divergences from the Go app) ──
     let goOutput = """
     [paths]
       inbox = "~/Pictures/PhotoCull/inbox"
@@ -56,10 +59,14 @@ func suiteConfig() throws {
       dump = "~/Downloads"
 
     [files]
-      raw_extensions = ["RAF", "RW2"]
+      raw_extensions = ["RAF", "RW2", "CR2", "CR3", "NEF", "ARW", "DNG", "ORF", "PEF"]
       jpg_extensions = ["JPG", "JPEG"]
+
+    [finalize]
+      export_jpgs = true
+      crop_export = "crop"
     """
-    checkEqual(cfg.toTOML(), goOutput + "\n", "toTOML matches Go marshal exactly")
+    checkEqual(cfg.toTOML(), goOutput + "\n", "toTOML matches the default file shape")
 
     // ── ~ expansion ──
     checkEqual(PCConfig.expandHome("~/Pictures/x"), home + "/Pictures/x", "expandHome expands ~/")

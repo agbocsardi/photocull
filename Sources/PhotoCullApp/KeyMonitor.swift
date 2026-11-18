@@ -42,6 +42,11 @@ final class KeyMonitor {
     var handler: ((KeyEvent) -> Bool)?
     /// When true, all keys are passed straight through (e.g. a sheet is up).
     var suspended = false
+    /// The main cull window. Keys typed in any other window (the Settings
+    /// scene, panels) belong to that window's controls, not the cull keymap.
+    /// Sheets are child windows of it, so modal keys keep working. Latched
+    /// once at launch; if nil, routing falls back to the permissive behaviour.
+    weak var cullWindow: NSWindow?
 
     private var monitor: Any?
 
@@ -60,6 +65,14 @@ final class KeyMonitor {
 
     private func route(_ event: NSEvent) -> Bool {
         guard !suspended, let handler else { return false }
+
+        // The cull keymap belongs to the cull window (and its sheets) only.
+        // The Settings scene is a separate key window: keys pressed there —
+        // whether in a text field or any other focused control — must reach
+        // that window, never the cull map.
+        if let cull = cullWindow, event.window !== cull, event.window?.parent !== cull {
+            return false
+        }
 
         // Never steal keys from a focused text field / editor.
         if let responder = NSApp.keyWindow?.firstResponder,

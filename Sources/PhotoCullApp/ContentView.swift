@@ -42,7 +42,6 @@ struct ContentView: View {
             switch modal {
             case .help:      HelpSheet()
             case .ingest:    IngestSheet()
-            case .settings:  HelpSheet()
             case .finalize, .globalFinalize: FinalizeSheet()
             }
         }

@@ -21,18 +21,45 @@ public struct FilesConfig: Codable, Sendable, Equatable {
     }
 }
 
+/// Finalize defaults stored in the `[finalize]` config section.
+public struct FinalizeConfig: Codable, Sendable, Equatable {
+    /// `crop_export = "crop"`.
+    public static let cropExportCrop = "crop"
+    /// `crop_export = "original"`.
+    public static let cropExportOriginal = "original"
+
+    /// Whether keeper JPG copies are written to the exports folder on finalize.
+    public var exportJPGs: Bool
+    /// `"crop"` or `"original"` — see `cropExportMode`.
+    public var cropExport: String
+
+    public init(exportJPGs: Bool = true, cropExport: String = FinalizeConfig.cropExportCrop) {
+        self.exportJPGs = exportJPGs; self.cropExport = cropExport
+    }
+
+    /// The `[finalize]` value mapped onto the finalize engine's export mode.
+    public var cropExportMode: CropExportMode { cropExport == FinalizeConfig.cropExportOriginal ? .original : .applyCrop }
+}
+
 public struct PCConfig: Codable, Sendable, Equatable {
     public var paths: PathsConfig
     public var files: FilesConfig
-    public init(paths: PathsConfig, files: FilesConfig) { self.paths = paths; self.files = files }
+    public var finalize: FinalizeConfig
+    public init(paths: PathsConfig, files: FilesConfig,
+                finalize: FinalizeConfig = FinalizeConfig()) {
+        self.paths = paths; self.files = files; self.finalize = finalize
+    }
 
-    /// Defaults identical to Go `DefaultConfig()`.
+    /// Defaults. Paths and keys match the Go app; the RAW extension list is a
+    /// deliberate divergence — Go shipped only RAF/RW2, the port covers the
+    /// common camera brands so a stock config pairs most libraries.
     public static func defaultConfig() -> PCConfig {
         PCConfig(
             paths: PathsConfig(inbox: "~/Pictures/PhotoCull/inbox",
                                archive: "~/Pictures/PhotoCull/archive",
                                dump: "~/Downloads"),
-            files: FilesConfig(rawExtensions: ["RAF", "RW2"], jpgExtensions: ["JPG", "JPEG"]))
+            files: FilesConfig(rawExtensions: ["RAF", "RW2", "CR2", "CR3", "NEF", "ARW", "DNG", "ORF", "PEF"],
+                               jpgExtensions: ["JPG", "JPEG"]))
     }
 
     /// Absolute path of the config file: `~/.config/photocull/config.toml`.
@@ -172,6 +199,13 @@ public struct PCConfig: Codable, Sendable, Equatable {
             if case .array(let v)? = section["raw_extensions"], !v.isEmpty { cfg.files.rawExtensions = v }
             if case .array(let v)? = section["jpg_extensions"], !v.isEmpty { cfg.files.jpgExtensions = v }
         }
+        if let section = parsed["finalize"] {
+            if case .bool(let v)? = section["export_jpgs"] { cfg.finalize.exportJPGs = v }
+            if case .string(let v)? = section["crop_export"],
+               v == FinalizeConfig.cropExportCrop || v == FinalizeConfig.cropExportOriginal {
+                cfg.finalize.cropExport = v
+            }
+        }
     }
 
     /// Write the default config file, creating parent directories as needed.
@@ -192,20 +226,99 @@ public struct PCConfig: Codable, Sendable, Equatable {
         return NSHomeDirectory() + "/" + path.dropFirst(2)
     }
 
+    /// Abbreviate a path under the user's home directory back to `~/…` form,
+    /// the counterpart of `expandHome`. Paths elsewhere are returned unchanged.
+    public static func abbreviateHome(_ path: String) -> String {
+        let home = NSHomeDirectory()
+        guard path.count > home.count, path.hasPrefix(home + "/") else { return path }
+        return "~/" + path.dropFirst(home.count + 1)
+    }
+
+    /// Save to the config file, writing paths back in `~/…` form when they are
+    /// under the home directory. Atomic; creates the parent directory.
+    public func save(to url: URL = URL(fileURLWithPath: configPath)) throws {
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try toTOML().data(using: .utf8)?.write(to: url, options: .atomic)
+    }
+
+    /// Human-readable problems with this configuration, for the settings
+    /// window to show inline before Apply. Pure: the filesystem is inspected
+    /// read-only and nothing is created.
+    public func validate() -> [String] {
+        var problems: [String] = []
+
+        // Per-path check. Returns the canonicalized path, or nil when unusable.
+        func check(_ name: String, _ raw: String) -> String? {
+            let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                problems.append("\(name) path is empty.")
+                return nil
+            }
+            let expanded = Self.expandHome(trimmed)
+            guard expanded.hasPrefix("/") else {
+                problems.append("\(name) path is not absolute: \(Self.abbreviateHome(trimmed)).")
+                return nil
+            }
+            var isDirectory: ObjCBool = false
+            if FileManager.default.fileExists(atPath: expanded, isDirectory: &isDirectory),
+               !isDirectory.boolValue {
+                problems.append("\(name) path exists but is not a folder: \(Self.abbreviateHome(expanded)).")
+            }
+            return (expanded as NSString).standardizingPath
+        }
+
+        let existing: [(String, String)] = [
+            ("Inbox", check("Inbox", paths.inbox)),
+            ("Archive", check("Archive", paths.archive)),
+            ("Exports", check("Exports", paths.dump))
+        ].compactMap { name, path in path.map { (name, $0) } }
+        for i in 0..<existing.count {
+            for j in (i + 1)..<existing.count {
+                let a = existing[i], b = existing[j]
+                if a.1 == b.1 {
+                    problems.append("\(a.0) and \(b.0) point at the same folder.")
+                } else if a.1.hasPrefix(b.1 + "/") {
+                    problems.append("\(a.0) sits inside \(b.0).")
+                } else if b.1.hasPrefix(a.1 + "/") {
+                    problems.append("\(b.0) sits inside \(a.0).")
+                }
+            }
+        }
+
+        let raws = files.rawExtensions.map { $0.trimmingCharacters(in: .whitespaces).uppercased() }
+        let jpgs = files.jpgExtensions.map { $0.trimmingCharacters(in: .whitespaces).uppercased() }
+        if raws.filter({ !$0.isEmpty }).isEmpty { problems.append("At least one RAW extension is required.") }
+        if jpgs.filter({ !$0.isEmpty }).isEmpty { problems.append("At least one JPG extension is required.") }
+        let overlap = Set(raws.filter { !$0.isEmpty }).intersection(jpgs.filter { !$0.isEmpty })
+        if !overlap.isEmpty {
+            problems.append("\(overlap.sorted().joined(separator: ", ")) is listed as both RAW and JPG; " +
+                            "a file with that extension could pair with itself.")
+        }
+        return problems
+    }
+
     /// Serialize back to TOML in the same shape Go's toml.Marshal produces:
     /// `[section]` header, 2-space indented `key = value` lines, blank line
-    /// between sections, trailing newline.
+    /// between sections, trailing newline. Strings are escaped for `\` and `"`
+    /// (the parser unescapes both), and home paths are written back as `~/…`.
     public func toTOML() -> String {
-        func quoted(_ s: String) -> String { "\"\(s)\"" }
+        func quoted(_ s: String) -> String {
+            "\"" + s.replacingOccurrences(of: "\\", with: "\\\\")
+                     .replacingOccurrences(of: "\"", with: "\\\"") + "\""
+        }
         func array(_ a: [String]) -> String { "[" + a.map(quoted).joined(separator: ", ") + "]" }
         var out = ""
         out += "[paths]\n"
-        out += "  inbox = \(quoted(paths.inbox))\n"
-        out += "  archive = \(quoted(paths.archive))\n"
-        out += "  dump = \(quoted(paths.dump))\n"
+        out += "  inbox = \(quoted(Self.abbreviateHome(paths.inbox)))\n"
+        out += "  archive = \(quoted(Self.abbreviateHome(paths.archive)))\n"
+        out += "  dump = \(quoted(Self.abbreviateHome(paths.dump)))\n"
         out += "\n[files]\n"
         out += "  raw_extensions = \(array(files.rawExtensions))\n"
         out += "  jpg_extensions = \(array(files.jpgExtensions))\n"
+        out += "\n[finalize]\n"
+        out += "  export_jpgs = \(finalize.exportJPGs)\n"
+        out += "  crop_export = \(quoted(finalize.cropExport))\n"
         return out
     }
 }
@@ -213,6 +326,7 @@ public struct PCConfig: Codable, Sendable, Equatable {
 public enum TOMLValue: Sendable, Equatable {
     case string(String)
     case array([String])
+    case bool(Bool)
 }
 
 /// Minimal TOML reader for the shapes used by photocull configs:
@@ -250,6 +364,8 @@ public enum TOMLParser {
             } else if value.hasPrefix("[") {
                 let items = splitArrayItems(value).compactMap { parseQuoted($0) }
                 result[section]?[key] = .array(items)
+            } else if value == "true" || value == "false" {
+                result[section]?[key] = .bool(value == "true")
             }
         }
         return result
