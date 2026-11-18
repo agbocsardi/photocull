@@ -178,9 +178,9 @@ private final class Gate: @unchecked Sendable {
         after.release()
         await until("Finalize success completion") { a.bulkOperation == nil }
         expect(a.errorMessage == nil && a.permitsTermination, "success releases common gate")
-        expect(a.pairs.isEmpty && a.activeDate == "date", "success refresh reads actual retained metadata-only folder")
-        expect(a.toast?.contains("retained:") == true, "completion surfaces retained session folder")
-        expect((try fm.contentsOfDirectory(atPath: f.input.path)) == [Session.fileName], "success leaves no recovery/claim/lock files")
+        expect(a.activeDate == "other" && a.pairs.map(\.stem) == ["Z"], "success refresh reads the actual finalized filesystem")
+        expect(a.toast?.contains("Finalized 1 session(s)") == true && a.toast?.contains("retained:") != true, "completion reports removal, not retention")
+        expect(!fm.fileExists(atPath: f.input.path), "success removes the sidecar-only session folder")
         expect((try fm.contentsOfDirectory(atPath: f.archive.path)).count == 6, "real native archive effects completed")
     }
     // Dismissal and late summary cannot overwrite a newer preparation, even with a different selected date set.
@@ -223,7 +223,8 @@ private final class Gate: @unchecked Sendable {
         expect(a.errorMessage == nil, "confirmation cannot be redirected by changed selection/stats")
         expect(fm.fileExists(atPath: f.archive.appendingPathComponent("A.JPG").path), "captured first session archived")
         expect(fm.fileExists(atPath: f.root.appendingPathComponent("archive/other/Z.JPG").path), "captured second session archived")
-        expect(a.toast?.contains("2 session(s)") == true && a.toast?.contains(f.input.path) == true && a.toast?.contains(f.other.path) == true, "multi completion aggregates retained folders")
+        expect(a.toast?.contains("2 session(s)") == true && a.toast?.contains("retained:") != true, "multi completion removes both sidecar-only folders")
+        expect(!fm.fileExists(atPath: f.input.path) && !fm.fileExists(atPath: f.other.path), "both finalized folders removed")
     }
     // Both success and partial failure discard affected old Session/undo/redo references, not just active pointers.
     for failing in [false, true] {
@@ -248,6 +249,11 @@ private final class Gate: @unchecked Sendable {
             expect(try Data(contentsOf: f.trash.appendingPathComponent("B.JPG")) == oldJPG, "failure prefix synthetic Trash marker exact")
             expect(fm.fileExists(atPath: f.input.appendingPathComponent(".photocull-recovery.json").path), "partial failure keeps retry blocker")
         } else { expect(a.errorMessage == nil, "success finishes without error") }
+        // A successful run removes the sidecar-only folder; recreate it before
+        // writing the replacement session the invalidation checks inspect.
+        if !fm.fileExists(atPath: f.input.path) {
+            try fm.createDirectory(at: f.input, withIntermediateDirectories: true)
+        }
         let fresh = Session.fresh(); fresh.set("NEW", .keep); try fresh.save(folder: f.input)
         let replacement = try data(f.input)
         a.undo(); a.redo()

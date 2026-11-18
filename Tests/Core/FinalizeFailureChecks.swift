@@ -384,7 +384,7 @@ func suiteFinalizeFailureChecks() throws {
             bytes(dst, original, "EXDEV archive bytes exact")
             expect(FileToken.read(dst) != identity, "EXDEV final output distinct inode")
             expect(!fm.fileExists(atPath: owned!.path) && !fm.fileExists(atPath: src.path), "EXDEV success removes owned source")
-            expect((try fm.contentsOfDirectory(atPath: f.input.path)) == [Session.fileName], "EXDEV success removes claims and record only")
+            expect(!fm.fileExists(atPath: f.input.path), "EXDEV success removes claims, record and the sidecar-only folder")
         } else {
             let error = failure { _ = try run(f, dump: false, hooks: hooks) }
             if scenario == "unlink" { precondition(chmod(owned!.deletingLastPathComponent().path, 0o700) == 0) }
@@ -400,11 +400,11 @@ func suiteFinalizeFailureChecks() throws {
                 expect(FileToken.read(dst) != identity, "EXDEV unlink failure prefix is copied inode")
             } else { expect(!fm.fileExists(atPath: dst.path), "EXDEV failed copy never promoted") }
             try retryBlocked(f)
+            bytes(f.input.appendingPathComponent(Session.fileName), metadata, "EXDEV preserves sidecar")
         }
         expect(forced == 1 && copies == 1, "EXDEV catch entered actual fallback once")
         expect(promotions == (scenario == "copy" ? 0 : 1), "EXDEV actual Foundation copy success/failure observed")
         expect(unlinks == (["success", "unlink"].contains(scenario) ? 1 : 0), "EXDEV unlink only after successful exclusive promotion")
-        bytes(f.input.appendingPathComponent(Session.fileName), metadata, "EXDEV preserves sidecar")
         try noStages(f)
     }
 
@@ -592,7 +592,7 @@ func suiteFinalizeFailureChecks() throws {
     do {
         let f = try setup(), jpg = Data([148]), raw = Data([149])
         try write(f.input, "B.JPG", jpg); try write(f.input, "B.RAF", raw)
-        let metadata = try sidecar(f, reject: true)
+        _ = try sidecar(f, reject: true)
         let result = try run(f, hooks: FinalizeHooks(trash: { owned in
             let dst = f.trash.appendingPathComponent(owned.lastPathComponent)
             guard renameatx_np(AT_FDCWD, owned.path, AT_FDCWD, dst.path, UInt32(RENAME_EXCL)) == 0 else {
@@ -603,8 +603,7 @@ func suiteFinalizeFailureChecks() throws {
         expect(result.trashed == 2 && result.archived == 0, "successful synthetic reject counts pair")
         bytes(f.trash.appendingPathComponent("B.JPG"), jpg, "successful synthetic JPG marker exact")
         bytes(f.trash.appendingPathComponent("B.RAF"), raw, "successful synthetic RAW marker exact")
-        bytes(f.input.appendingPathComponent(Session.fileName), metadata, "successful rejection retains decisions")
-        expect((try fm.contentsOfDirectory(atPath: f.input.path)) == [Session.fileName], "successful rejection removes only own metadata/empty claims")
+        expect(!fm.fileExists(atPath: f.input.path), "successful rejection removes the sidecar-only folder with its decisions")
     }
     // Changed bytes before a later pair/orphan preserve the changed decisions and already-completed prefix.
     for target in ["B.JPG", "O.RAF"] {
@@ -711,7 +710,7 @@ func suiteFinalizeFailureChecks() throws {
         release.signal()
         guard finished.wait(timeout: .now() + 15) == .success else { fatalError("contention finish timeout") }
         expect(outcome.change { $0 } == nil, "first run drains successfully")
-        expect(!(try fm.contentsOfDirectory(atPath: f.input.path)).contains { $0.hasPrefix(".photocull-") && $0 != Session.fileName }, "success leaves no claims/lock/recovery record")
+        expect(!fm.fileExists(atPath: f.input.path), "contended success removes the sidecar-only folder")
     }
     print("FinalizeFailureChecks: \(checks) checks passed; artifacts: \(root.path)")
 }

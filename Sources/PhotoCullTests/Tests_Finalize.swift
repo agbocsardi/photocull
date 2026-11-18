@@ -68,10 +68,11 @@ func suiteFinalize() throws {
           "rejected JPG is not dumped")
     checkEqual((try Data(contentsOf: dumpOverride.appendingPathComponent("A0001.JPG"))).count, 100,
                ".original dump is a byte copy")
-    // The safety layer deliberately retains the sidecar, so the emptied date
-    // folder remains; rejects left the inbox (trashed).
-    check(exists(folder), "inbox date folder retained with its sidecar")
-    check(exists(folder.appendingPathComponent(".photocull.json")), "sidecar retained with the folder")
+    // Cleanup removes the emptied date folder together with its sidecar:
+    // enumerated through the pinned descriptor, only when nothing else remains.
+    check(!exists(folder), "sidecar-only inbox folder removed after finalize")
+    check(!exists(folder.appendingPathComponent(".photocull.json")), "sidecar removed with its folder")
+    checkEqual(res.retainedFolders, [], "no retained folders when only the sidecar remains")
 
     // ── run without dump: no dump folder created; archive collision → _2 ─
     let date2 = "2024-06-01"
@@ -95,7 +96,21 @@ func suiteFinalize() throws {
           "RAW archived with the pair's common collision suffix")
     checkEqual((try? Data(contentsOf: arch2.appendingPathComponent("E0001_2.JPG")))?.count, 700,
                "collided archive copy holds the new file's bytes")
-    check(exists(folder2), "second inbox date folder retained with its sidecar")
+    check(!exists(folder2), "second sidecar-only inbox folder removed")
+    checkEqual(res2.retainedFolders, [], "second run reports no retained folders")
+
+    // ── an extra non-photo file keeps the folder and its sidecar ─────────
+    let dateX = "2024-06-02"
+    let folderX = tmp.appendingPathComponent("inbox").appendingPathComponent(dateX)
+    try touch(folderX.appendingPathComponent("X0001.JPG"), bytes: 50)
+    try writeSidecar(folderX, #"{"version":1,"decisions":{"X0001":"keep"},"last_index":1}"#)
+    try touch(folderX.appendingPathComponent("notes.txt"), bytes: 5)
+    let resX = try Finalize.run(cfg: cfg, date: dateX, dump: false, cropMode: .original, dumpOverride: nil)
+    checkEqual(resX.archived, 1, "extra-file session archives its only pair")
+    check(exists(folderX), "inbox folder retained when an extra file is present")
+    check(exists(folderX.appendingPathComponent(".photocull.json")),
+          "sidecar retained with the extra file")
+    checkEqual(resX.retainedFolders, [canonicalPath(folderX)], "retained extra-file folder reported")
 
     // ── runMulti: two dates → one dump folder "first to last" ────────────
     let dA = "2025-03-07"
@@ -146,8 +161,8 @@ func suiteFinalize() throws {
         } else {
             check(false, "cropped output is a readable image")
         }
-        check(exists(tmp.appendingPathComponent("inbox").appendingPathComponent(date3)),
-              "crop session inbox folder retained with its sidecar")
+        check(!exists(tmp.appendingPathComponent("inbox").appendingPathComponent(date3)),
+              "crop session sidecar-only inbox folder removed")
     } else {
         print("  (skip: fixture JPEG not present for applyCrop test)")
     }

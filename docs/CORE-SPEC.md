@@ -108,7 +108,14 @@ Use `CGImageSourceCreateWithURL` + `CGImageSourceCopyPropertiesAtIndex`.
    folder. With `.original` copy bytes; with `.applyCrop` and a non-full-frame crop,
    write a re-encoded cropped JPEG via `ImagePipeline.export` and count it in `cropped`.
 4. Orphan RAWs → archive.
-5. Keep `.photocull.json` (never unlinked, to avoid an enumerate/unlink race) and remove the inbox date folder only if it is empty; a sidecar-only folder is retained and reported in `retainedFolders`.
+5. After successful processing and recovery/claims cleanup, enumerate the inbox date
+   folder through the directory descriptor pinned with `O_NOFOLLOW`. Remove an empty
+   folder, or unlink `.photocull.json` first if it is the sole entry, matches the sidecar
+   Finalize read, and is a regular file with `nlink == 1`. Remove the directory with
+   `unlinkat(AT_REMOVEDIR)` through its verified parent. Any other content or cleanup
+   failure leaves the folder in `retainedFolders` without failing Finalize. A late arrival
+   can prevent directory removal even after the sidecar has been unlinked. Cleanup uses
+   the cooperative session lock, not exclusion of external writers.
 6. Name collisions in archive/dump get a `_2`, `_3`… suffix.
 
 `trash`: use `FileManager.trashItem(at:resultingItemURL:)`; fall back to moving into

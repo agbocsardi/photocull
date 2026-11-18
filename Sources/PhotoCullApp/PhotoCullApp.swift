@@ -79,6 +79,9 @@ struct PhotoCullApp: App {
                     .disabled(app.sessions.isEmpty)
                 Button("Re-pair RAW Files…") { app.repairPairingInteractive() }
                     .disabled(app.sessions.isEmpty)
+                Button("Remove Empty Sessions…") { app.beginRemoveEmptySessions() }
+                    .disabled(!app.canRemoveEmptySessions || !app.sessions.contains { $0.total == 0 })
+                    .help("Remove finalized session folders that hold only their sidecar")
             }
             // The standard “PhotoCull Help” search item is replaced by the
             // app's own guide — the Controls sheet already answers “which key?”.

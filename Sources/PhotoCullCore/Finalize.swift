@@ -240,8 +240,7 @@ public enum Finalize {
             try hooks.boundary?("recordRemoval", input.url.appendingPathComponent(FinalizeRecovery.name))
             try record!.removeOwned()
             try input.removeEmptyChild(claims)
-            try input.verifyVisible()
-            let removed = cleanupSessionFolder(input.url)
+            let removed = cleanupSessionFolder(input, expected: sidecar.identity.map { .sidecar($0) } ?? .empty)
             return FinalizeResult(sessions: 1, archived: archived, trashed: trashed, dumped: dumped,
                                   cropped: cropped, dumpFolder: dumpURL.path,
                                   retainedFolders: removed ? [] : [input.currentPath])
@@ -321,9 +320,89 @@ public enum Finalize {
         }
     }
 
-    /// Keep every sidecar and residual entry. Only an actually empty directory may disappear.
-    @discardableResult package static func cleanupSessionFolder(_ folder: URL) -> Bool { removeEmptyDirectory(folder) }
+    @discardableResult package static func cleanupSessionFolder(_ folder: URL) -> Bool {
+        guard let pinned = try? FinalizeDirectory(folder, lock: true),
+              let contents = cleanupContents(pinned) else { return false }
+        return cleanupSessionFolder(pinned, expected: contents)
+    }
     @discardableResult package static func removeEmptyDirectory(_ folder: URL) -> Bool { Darwin.rmdir(folder.path) == 0 }
+
+    private enum CleanupContents: Equatable {
+        case empty, sidecar(FinalizeIdentity)
+    }
+
+    private static func singleLinkSidecar(_ input: FinalizeDirectory) -> FinalizeIdentity? {
+        var st = stat()
+        guard fstatat(input.fd, Session.fileName, &st, AT_SYMLINK_NOFOLLOW) == 0,
+              st.st_mode & S_IFMT == S_IFREG, st.st_nlink == 1 else { return nil }
+        return FinalizeIdentity(st)
+    }
+
+    private static func cleanupContents(_ input: FinalizeDirectory) -> CleanupContents? {
+        // A fresh open file description gives readdir its own offset.
+        let fd = openat(input.fd, ".", O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard fd >= 0 else { return nil }
+        guard let stream = fdopendir(fd) else { close(fd); return nil }
+        defer { closedir(stream) }
+        var seenSidecar = false
+        while true {
+            errno = 0
+            guard let entry = readdir(stream) else {
+                guard errno == 0 else { return nil }
+                return seenSidecar ? singleLinkSidecar(input).map { .sidecar($0) } : .empty
+            }
+            let name = withUnsafeBytes(of: entry.pointee.d_name) {
+                String(cString: $0.bindMemory(to: CChar.self).baseAddress!)
+            }
+            if name == "." || name == ".." { continue }
+            guard name == Session.fileName, !seenSidecar else { return nil }
+            seenSidecar = true
+        }
+    }
+
+    /// Best effort under the session lock. A late arrival can stop rmdir even
+    /// after the sidecar was unlinked. No recursive deletion or rollback.
+    private static func cleanupSessionFolder(_ input: FinalizeDirectory, expected: CleanupContents) -> Bool {
+        guard let parent = try? FinalizeDirectory(input.url.deletingLastPathComponent()) else { return false }
+        let name = input.url.lastPathComponent
+        func stillVisible() -> Bool {
+            guard (try? parent.verifyVisible()) != nil,
+                  let actual = try? parent.readIdentity(name, regular: false) else { return false }
+            return input.identity.sameObject(actual)
+        }
+        guard stillVisible(), cleanupContents(input) == expected, stillVisible() else { return false }
+        if case .sidecar(let identity) = expected {
+            guard singleLinkSidecar(input) == identity, unlinkat(input.fd, Session.fileName, 0) == 0 else { return false }
+        }
+        return stillVisible() && unlinkat(parent.fd, name, AT_REMOVEDIR) == 0
+    }
+
+    package struct EmptySession: Sendable {
+        package var date: String { folder.lastPathComponent }
+        fileprivate let folder: URL
+        fileprivate let directory: FinalizeIdentity
+        fileprivate let sidecar: FinalizeIdentity
+    }
+
+    /// Capture the objects being offered so confirmation cannot delete a replacement.
+    package static func emptySessions(cfg: PCConfig, dates: [String]) -> [EmptySession] {
+        dates.compactMap { date in
+            guard let folder = try? inboxFolder(cfg: cfg, date: date),
+                  let input = try? FinalizeDirectory(folder, lock: true),
+                  case .sidecar(let sidecar)? = cleanupContents(input),
+                  (try? input.verifyVisible()) != nil else { return nil }
+            return EmptySession(folder: folder, directory: input.identity, sidecar: sidecar)
+        }
+    }
+
+    package static func removeEmptySessions(_ candidates: [EmptySession]) -> [String] {
+        candidates.compactMap { candidate in
+            guard let input = try? FinalizeDirectory(candidate.folder, lock: true),
+                  input.identity.sameObject(candidate.directory),
+                  cleanupSessionFolder(input, expected: .sidecar(candidate.sidecar)) else { return nil }
+            return candidate.date
+        }
+    }
 
     @discardableResult
     public static func runMulti(cfg: PCConfig, dates: [String], dump: Bool, cropMode: CropExportMode) throws -> FinalizeResult {
