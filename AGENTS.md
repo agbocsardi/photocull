@@ -18,8 +18,8 @@ AI agents develop this app on the owner's machine. The owner's real photo librar
   touch the real library or config. The only REAL-mode executable is
   `/Applications/PhotoCull.app` (or `~/Applications/PhotoCull.app`) with bundle id
   `local.photocull.swift` — and launching that is the owner's job, not an agent's.
-- Until a change to the mode gate is verified, run any PhotoCull binary with
-  `HOME=$(mktemp -d)`. After changing startup/config code, verify with
+- Setting `HOME` provides NO isolation: `NSHomeDirectory()` ignores it. The mode
+  gate is the only isolation. After changing startup/config code, verify with
   `find ~/Pictures/PhotoCull ~/.config/photocull -newer <marker>` (marker created
   before the run) that nothing real changed.
 

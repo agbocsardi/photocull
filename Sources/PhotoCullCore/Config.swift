@@ -40,7 +40,8 @@ public struct PCConfig: Codable, Sendable, Equatable {
     /// `~/Library/Caches/PhotoCull-Dev/config/config.toml` — development runs
     /// can never read or write the real config.
     public static var configPath: String {
-        if LibraryMode.current == .dev {
+        if LibraryMode.current != .real {
+            LibraryMode.requireSafeDevRoot()
             return LibraryMode.devRoot + "/config/config.toml"
         }
         return URL(fileURLWithPath: NSHomeDirectory())
@@ -54,10 +55,11 @@ public struct PCConfig: Codable, Sendable, Equatable {
     /// if missing) the throwaway config under the dev root, and regenerates it
     /// if it ever points outside that root.
     public static func load() -> PCConfig {
-        guard LibraryMode.current == .dev else {
-            return load(from: URL(fileURLWithPath: configPath))
+        switch LibraryMode.current {
+        case .real: return load(from: URL(fileURLWithPath: configPath))
+        case .dev: return loadDev()
+        case .fixture: preconditionFailure("Fixture mode must use its explicit validated config")
         }
-        return loadDev()
     }
 
     /// Default DEV config: every path pinned inside the dev root.
@@ -74,6 +76,7 @@ public struct PCConfig: Codable, Sendable, Equatable {
     /// the real library) is refused and regenerated — dev must never be
     /// configurable to point at real folders.
     static func loadDev() -> PCConfig {
+        LibraryMode.requireSafeDevRoot()
         let url = URL(fileURLWithPath: LibraryMode.devRoot + "/config/config.toml")
         var cfg = devDefaultConfig()
         if let data = try? Data(contentsOf: url), let text = String(data: data, encoding: .utf8) {

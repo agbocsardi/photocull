@@ -70,6 +70,32 @@ public enum LibraryMode: Equatable, Sendable {
         return base == root || base.hasPrefix(root + "/")
     }
 
+    /// Traps unless the dev root and its config folder are real directories
+    /// (not symlinks) and the config file, if present, is a regular file, and
+    /// the dev root does not resolve into the real library or config. A
+    /// symlink planted there could otherwise route dev reads/writes — or the
+    /// regeneration of a bad dev config — into real data. Dev builds only.
+    public static func requireSafeDevRoot() {
+        let fm = FileManager.default
+        for dir in [devRoot, devRoot + "/config"] {
+            if !fm.fileExists(atPath: dir) { try? fm.createDirectory(atPath: dir, withIntermediateDirectories: true) }
+            var st = stat()
+            precondition(lstat(dir, &st) == 0 && st.st_mode & S_IFMT == S_IFDIR,
+                         "PhotoCull dev root is not a real directory: \(dir)")
+        }
+        var st = stat()
+        if lstat(devRoot + "/config/config.toml", &st) == 0 {
+            precondition(st.st_mode & S_IFMT == S_IFREG, "PhotoCull dev config is not a regular file")
+        }
+        let root = canonical(devRoot) ?? devRoot
+        for real in ["Pictures/PhotoCull", ".config/photocull"] {
+            if let r = canonical(NSHomeDirectory() + "/" + real) {
+                precondition(root != r && !root.hasPrefix(r + "/") && !r.hasPrefix(root + "/"),
+                             "PhotoCull dev root overlaps real data: \(root)")
+            }
+        }
+    }
+
     static func canonical(_ path: String) -> String? {
         guard let resolved = realpath(path, nil) else { return nil }
         defer { free(resolved) }
