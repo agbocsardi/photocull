@@ -85,7 +85,7 @@ struct ImagePane: View {
                             if app.cropMode {
                                 VStack {
                                     Spacer()
-                                    tiltBar
+                                    cropBar
                                 }
                                 .frame(width: container.width, height: container.height)
                             }
@@ -192,34 +192,116 @@ struct ImagePane: View {
             .offset(x: origin.x, y: origin.y)
     }
 
-    /// Floating tilt control under the canvas while crop mode is open.
-    /// Drag it, or click it to focus and use ← → (⇧ for 1°) / ↑ ↓.
-    private var tiltBar: some View {
-        HStack(spacing: Metric.elementGap) {
-            Text("TILT")
-                .font(Typo.sectionHeader)
-                .tracking(0.4)
-                .foregroundStyle(Palette.crop)
-                .onTapGesture { tiltFocused = true }
-            Slider(value: Binding(
-                get: { canvas.cropTilt },
-                set: { canvas.cropTilt = ($0 * 4).rounded() / 4 }),
-                in: -45...45, step: 0.25)
-                .frame(width: 320)
-                .focused($tiltFocused)
-            Text(String(format: "%+.2f°", canvas.cropTilt))
-                .font(Typo.number)
-                .monospacedDigit()
-                .frame(width: 60, alignment: .trailing)
-            FloatingButton(symbol: "arrow.counterclockwise", tint: Palette.secondary,
-                           tip: "Reset tilt (t)", filled: false) { app.resetTilt() }
+    /// Floating crop toolbar while crop mode is open: the mouse path for
+    /// crop actions — aspect picker (a), reset (r), cropped preview (p),
+    /// tilt slider and reset tilt (t), Cancel (Esc) and Apply (Enter).
+    /// Two rows keep it inside the canvas at the app's minimum window width
+    /// (940pt minus sidebar and inspector); the slider flexes to what's left.
+    private var cropBar: some View {
+        VStack(spacing: 6) {
+            HStack(spacing: Metric.elementGap) {
+                aspectMenu
+                FloatingButton(symbol: "arrow.uturn.backward", tint: Palette.secondary,
+                               tip: "Reset the crop region to the full frame (r)", filled: false) {
+                    app.resetCrop()
+                }
+                FloatingButton(symbol: app.showCroppedPreview ? "rectangle.inset.filled" : "rectangle",
+                               tint: app.showCroppedPreview ? Palette.crop : Palette.secondary,
+                               tip: "Show the saved crop instead of the full frame after applying (p)",
+                               filled: false) {
+                    app.showCroppedPreview.toggle()
+                }
+                Spacer(minLength: Metric.elementGap)
+                FloatingButton(symbol: "xmark", tint: Palette.reject,
+                               tip: "Discard the crop changes and leave crop mode (Esc)", filled: false) {
+                    app.cancelCrop()
+                }
+                cropApplyButton
+            }
+            HStack(spacing: Metric.elementGap) {
+                Text("TILT")
+                    .font(Typo.sectionHeader)
+                    .tracking(0.4)
+                    .foregroundStyle(Palette.crop)
+                    .onTapGesture { tiltFocused = true }
+                Slider(value: Binding(
+                    get: { canvas.cropTilt },
+                    set: { canvas.cropTilt = ($0 * 4).rounded() / 4 }),
+                    in: -45...45, step: 0.25)
+                    .frame(maxWidth: .infinity)
+                    .focused($tiltFocused)
+                    .help("Drag to straighten; use arrow keys when focused (or , / .)")
+                    .accessibilityLabel(Text("Tilt"))
+                Text(String(format: "%+.2f°", canvas.cropTilt))
+                    .font(Typo.number)
+                    .monospacedDigit()
+                    .frame(width: 60, alignment: .trailing)
+                FloatingButton(symbol: "arrow.counterclockwise", tint: Palette.secondary,
+                               tip: "Reset tilt (t)", filled: false) { app.resetTilt() }
+            }
         }
-        .padding(.horizontal, Metric.elementGap + 4)
-        .padding(.vertical, 6)
+        // Equal insets keep both rows clear of the capsule's rounded ends.
+        .padding(.horizontal, Metric.sectionGap)
+        .padding(.vertical, Metric.radiusButton)
+        .frame(maxWidth: Metric.inspectorWidth * 2)
+        .disabled(app.bulkOperation != nil || app.commandMode)
         .background(Capsule(style: .continuous).fill(Surface.floating))
         .overlay(Capsule(style: .continuous).strokeBorder(Palette.separator, lineWidth: 0.5))
         .shadowMedium()
+        // Inset the capsule from the pane edges when the canvas is at the
+        // app's minimum window width (there the 520 cap is not the limit).
+        .padding(.horizontal, Metric.elementGap)
         .padding(.bottom, Metric.elementGap * 2)
+    }
+
+    /// Keep the full click target but inset the accent treatment.
+    private var cropApplyButton: some View {
+        Button {
+            app.commitCrop()
+        } label: {
+            Text("Apply")
+                .font(Typo.caption.weight(.semibold))
+                .foregroundStyle(Palette.accent)
+                .padding(.horizontal, Metric.elementGap)
+                .frame(height: Metric.controlHeight - Metric.elementGap)
+                .background(
+                    RoundedRectangle(cornerRadius: Metric.radiusButton, style: .continuous)
+                        .fill(Palette.accent.opacity(0.14))
+                )
+                .frame(height: Metric.controlHeight)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .help("Save the crop and leave crop mode (Enter)")
+        .accessibilityLabel(Text("Save the crop and leave crop mode"))
+    }
+
+    /// Aspect-ratio picker: the `a` key's cycle, as a menu that jumps straight
+    /// to a preset. Picking one constrains the region exactly like `a` landings.
+    private var aspectMenu: some View {
+        Menu {
+            ForEach(CropAspect.allCases, id: \.self) { choice in
+                Button {
+                    app.cropAspect = choice
+                    app.applyAspect()
+                } label: {
+                    if choice == app.cropAspect {
+                        Label(choice.rawValue, systemImage: "checkmark")
+                    } else {
+                        Text(choice.rawValue)
+                    }
+                }
+            }
+        } label: {
+            Text("Ratio: \(app.cropAspect.rawValue)")
+                .font(Typo.callout)
+                .foregroundStyle(Palette.label)
+        }
+        .menuStyle(.borderlessButton)
+        .focusable(false)
+        .fixedSize()
+        .help("Aspect ratio for the crop region — the a key cycles these presets")
     }
 
     /// Right-hand header content: crop and zoom state, mirroring the other panes.
@@ -262,12 +344,61 @@ struct ImagePane: View {
 }
 
 /// Pill-shaped action bar over the photo: icons with tooltips, vibrancy + shadow.
+/// One row when the canvas is wide; `ViewThatFits` wraps it into two rows at
+/// the app's minimum window width (940pt minus sidebar and inspector) so no
+/// action falls off the screen.
 struct FloatingActionBar: View {
     @EnvironmentObject var app: AppState
     @EnvironmentObject var canvas: CanvasState
 
     var body: some View {
+        ViewThatFits(in: .horizontal) {
+            chrome {
+                navRow
+                barDivider
+                editRow
+                barDivider
+                zoomRow
+                barDivider
+                externalRow
+            }
+            chrome {
+                VStack(spacing: 6) {
+                    navRow
+                    HStack(spacing: 2) {
+                        editRow
+                        barDivider
+                        zoomRow
+                        barDivider
+                        externalRow
+                    }
+                }
+            }
+        }
+    }
+
+    /// The chrome shared by both layouts: padding, capsule, vibrancy, shadow.
+    private func chrome<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        HStack(spacing: 2) { content() }
+            .padding(.horizontal, Metric.elementGap)
+            .padding(.vertical, 6)
+            .background(Capsule(style: .continuous).fill(Surface.floating))
+            .overlay(Capsule(style: .continuous).strokeBorder(Palette.separator, lineWidth: 0.5))
+            .shadowMedium()
+    }
+
+    private var barDivider: some View {
+        Divider().frame(height: 16).overlay(Palette.separator)
+    }
+
+    /// Navigation + decision group: previous / next flank keep / reject, then
+    /// next undecided — the ← → J keys as clicks, dimmed at the ends.
+    private var navRow: some View {
         HStack(spacing: 2) {
+            action("chevron.left", tint: Palette.secondary,
+                   tip: "Previous photo (←)", filled: false, enabled: app.index > 0) {
+                app.nav(.prev)
+            }
             action(app.currentDecision == .keep ? "checkmark.circle.fill" : "checkmark.circle",
                    tint: Palette.keep,
                    tip: app.currentDecision == .keep
@@ -284,9 +415,24 @@ struct FloatingActionBar: View {
                    filled: app.currentDecision == .reject) {
                 app.mark(.reject)
             }
+            action("chevron.right", tint: Palette.secondary,
+                   tip: "Next photo (→)", filled: false,
+                   enabled: app.index + 1 < app.pairs.count) {
+                app.nav(.next)
+            }
+            action("arrow.forward", tint: Palette.secondary,
+                   tip: "Next undecided photo (⇧J)", filled: false,
+                   enabled: app.pairs.dropFirst(app.index + 1).contains {
+                       app.decision(for: $0.stem) == .undecided
+                   }) {
+                app.nav(.next, skipDecided: true)
+            }
+        }
+    }
 
-            Divider().frame(height: 16).overlay(Palette.separator)
-
+    /// Crop, cropped preview and quarter-turn rotation.
+    private var editRow: some View {
+        HStack(spacing: 2) {
             action("crop", tint: app.hasCrop ? Palette.crop : Palette.secondary,
                    tip: app.hasCrop ? "Adjust the saved crop (c)" : "Crop without changing the original (c)",
                    filled: false) {
@@ -297,10 +443,9 @@ struct FloatingActionBar: View {
                    tip: app.hasCrop
                      ? (app.showCroppedPreview ? "Show the full frame" : "Show the saved crop")
                      : "Save a crop first to compare it with the full frame",
-                   filled: false) {
+                   filled: false, enabled: app.hasCrop) {
                 app.showCroppedPreview.toggle()
             }
-            .disabled(!app.hasCrop)
 
             action("rotate.left", tint: Palette.secondary,
                    tip: "Rotate a quarter turn left", filled: false) {
@@ -310,9 +455,12 @@ struct FloatingActionBar: View {
                    tip: "Rotate a quarter turn right", filled: false) {
                 app.rotateQuarter(1)
             }
+        }
+    }
 
-            Divider().frame(height: 16).overlay(Palette.separator)
-
+    /// Zoom out / percentage / zoom in / fit.
+    private var zoomRow: some View {
+        HStack(spacing: 2) {
             action("minus.magnifyingglass", tint: Palette.secondary, tip: "Zoom out (-)", filled: false) {
                 canvas.zoomOut()
             }
@@ -325,24 +473,23 @@ struct FloatingActionBar: View {
             }
             action("arrow.up.left.and.arrow.down.right", tint: Palette.secondary,
                    tip: "Fit to window (0)", filled: false) { canvas.resetZoom() }
+        }
+    }
 
-            Divider().frame(height: 16).overlay(Palette.separator)
-
+    /// External apps: Preview and Finder.
+    private var externalRow: some View {
+        HStack(spacing: 2) {
             action("arrow.up.forward.app", tint: Palette.secondary,
                    tip: "Open in Preview (o)", filled: false) { app.openInPreview() }
             action("folder", tint: Palette.secondary,
                    tip: "Reveal in Finder (f)", filled: false) { app.revealInFinder() }
         }
-        .padding(.horizontal, Metric.elementGap)
-        .padding(.vertical, 6)
-        .background(Capsule(style: .continuous).fill(Surface.floating))
-        .overlay(Capsule(style: .continuous).strokeBorder(Palette.separator, lineWidth: 0.5))
-        .shadowMedium()
     }
 
     private func action(_ symbol: String, tint: Color, tip: String, filled: Bool,
-                        _ run: @escaping () -> Void) -> some View {
-        FloatingButton(symbol: symbol, tint: tint, tip: tip, filled: filled, run: run)
+                        enabled: Bool = true, _ run: @escaping () -> Void) -> some View {
+        FloatingButton(symbol: symbol, tint: tint, tip: tip, filled: filled,
+                       enabled: enabled && app.bulkOperation == nil && !app.commandMode, run: run)
     }
 }
 
@@ -352,6 +499,7 @@ private struct FloatingButton: View {
     let tint: Color
     let tip: String
     let filled: Bool
+    var enabled: Bool = true
     let run: () -> Void
 
     @StateObject private var hover = ViewState(false)
@@ -364,11 +512,14 @@ private struct FloatingButton: View {
                 .frame(width: Metric.controlHeight, height: Metric.controlHeight)
                 .background(
                     RoundedRectangle(cornerRadius: Metric.radiusButton, style: .continuous)
-                        .fill(filled ? tint : (hover.value ? Palette.hover : Color.clear))
+                        .fill(filled ? tint : (hover.value && enabled ? Palette.hover : Color.clear))
                 )
         }
         .buttonStyle(.plain)
+        .focusable(false)
         .onHover { hover.value = $0 }
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.35)
         .help(tip)
         .accessibilityLabel(Text(tip))
     }

@@ -191,13 +191,28 @@ inspect the interface from a terminal or an agent context.
 
 ## Mouse
 
-Every keyboard action has a mouse path. Click a session in the sidebar to open it
-(same as stepping onto it with the keyboard),
-`⌘`-click to mark it for multi-finalize (same as `Space`), click a filmstrip thumbnail
-to jump to a photo, and use the floating action bar over the photo for keep / reject /
-crop / zoom / Preview / Finder. Clicking any pane gives it focus (same as `1`–`4`),
-so `↑`/`↓` afterwards move the session cursor or the photo cursor accordingly.
-Right-click a session for open / finalize / multi-select.
+Use these controls to cull and crop without memorising shortcuts:
+
+- **Floating action bar** over the photo: previous / next / next undecided
+  flanking keep / reject, then crop, cropped preview, rotation, zoom and fit,
+  and Open in Preview / Reveal in Finder. At the app's minimum window width
+  the bar wraps into two rows instead of dropping actions; the navigation
+  buttons dim at the ends of the session.
+- **Crop toolbar** (shown while crop mode is open): pick the aspect ratio from
+  the RATIO menu (or cycle with `a`), reset the region to the full frame,
+  choose whether to show the cropped preview after applying, drag the tilt slider — click it to focus it and
+  then use the arrow keys — or reset the tilt, then Apply or Cancel, the
+  same as `Enter` / `Esc`. Drag the region and its handles to move and resize.
+- **Status bar**: every key hint is a button that runs the same action —
+  `z keep` marks keep, `:f finalize` opens the finalize sheet, `1-4 pane`
+  cycles pane focus, `tab filter` cycles the session filter, `? help` opens
+  the help. In crop mode the hints run the crop actions.
+- Click a session in the sidebar to open it (same as stepping onto it with the
+  keyboard), `⌘`-click to mark it for multi-finalize (same as `Space`), and
+  click a filmstrip thumbnail to jump to a photo. Clicking any pane gives it
+  focus (same as `1`–`4`), so `↑`/`↓` afterwards move the session cursor or the
+  photo cursor accordingly. Right-click a session for open / finalize /
+  multi-select.
 
 ## Crop is non-destructive
 
