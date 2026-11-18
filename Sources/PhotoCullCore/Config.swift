@@ -268,18 +268,18 @@ public struct PCConfig: Codable, Sendable, Equatable {
         func check(_ name: String, _ raw: String) -> String? {
             let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.isEmpty {
-                problems.append("\(name) path is empty.")
+                problems.append("No folder path for \(name).")
                 return nil
             }
             let expanded = Self.expandHome(trimmed)
             guard expanded.hasPrefix("/") else {
-                problems.append("\(name) path is not absolute: \(Self.abbreviateHome(trimmed)).")
+                problems.append("\(name) requires an absolute path: \(Self.abbreviateHome(trimmed)).")
                 return nil
             }
             var isDirectory: ObjCBool = false
             if FileManager.default.fileExists(atPath: expanded, isDirectory: &isDirectory),
                !isDirectory.boolValue {
-                problems.append("\(name) path exists but is not a folder: \(Self.abbreviateHome(expanded)).")
+                problems.append("The \(name) path exists but isn’t a folder: \(Self.abbreviateHome(expanded)).")
             }
             return Self.comparablePath(expanded)
         }
@@ -293,23 +293,23 @@ public struct PCConfig: Codable, Sendable, Equatable {
             for j in (i + 1)..<existing.count {
                 let a = existing[i], b = existing[j]
                 if a.1 == b.1 {
-                    problems.append("\(a.0) and \(b.0) point at the same folder.")
+                    problems.append("\(a.0) and \(b.0) use the same folder.")
                 } else if a.1.hasPrefix(b.1 + "/") {
-                    problems.append("\(a.0) sits inside \(b.0).")
+                    problems.append("The \(a.0) folder is inside the \(b.0) folder.")
                 } else if b.1.hasPrefix(a.1 + "/") {
-                    problems.append("\(b.0) sits inside \(a.0).")
+                    problems.append("The \(b.0) folder is inside the \(a.0) folder.")
                 }
             }
         }
 
         let raws = files.rawExtensions.map { $0.trimmingCharacters(in: .whitespaces).uppercased() }
         let jpgs = files.jpgExtensions.map { $0.trimmingCharacters(in: .whitespaces).uppercased() }
-        if raws.filter({ !$0.isEmpty }).isEmpty { problems.append("At least one RAW extension is required.") }
-        if jpgs.filter({ !$0.isEmpty }).isEmpty { problems.append("At least one JPG extension is required.") }
+        if raws.filter({ !$0.isEmpty }).isEmpty { problems.append("Enter at least one RAW extension.") }
+        if jpgs.filter({ !$0.isEmpty }).isEmpty { problems.append("Enter at least one JPG extension.") }
         let overlap = Set(raws.filter { !$0.isEmpty }).intersection(jpgs.filter { !$0.isEmpty })
         if !overlap.isEmpty {
-            problems.append("\(overlap.sorted().joined(separator: ", ")) is listed as both RAW and JPG; " +
-                            "a file with that extension could pair with itself.")
+            problems.append("\(overlap.sorted().joined(separator: ", ")): " +
+                            "listed under both RAW and JPG.")
         }
         return problems
     }

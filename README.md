@@ -111,24 +111,26 @@ The menu-bar outline remains a system-tinted template icon in every mode.
 
 ### Settings
 
-The real macOS settings window (**⌘,**) edits the config file — no more hand-editing
-`config.toml`:
+Open **PhotoCull > Settings** (⌘,) to edit `config.toml`.
 
-- **Folders** — inbox, archive and exports paths, with Choose… and Reveal buttons.
-  Changing a folder only repoints the app; nothing on disk is moved or renamed.
-- **Files** — the RAW and JPG extension lists (comma-separated; normalised to
-  uppercase without dots). A JPG and a RAW with the same filename stem form one pair.
-- **Finalize** — whether keeper JPG copies are exported at all, and whether those
-  copies get saved crops applied or stay full-frame. The finalize sheet can still
-  override the crop choice per run.
-- **General** — appearance, the config file's location, and Restore Defaults.
+- **Folders:** Use **Choose…** to change the inbox, archive or exports folder.
+  Use **Reveal** to find it in Finder. PhotoCull uses the new folder without
+  moving or renaming existing files.
+- **Files:** Separate RAW and JPG extensions with commas. PhotoCull saves them
+  in uppercase without dots. Files pair by filename, excluding the extension.
+- **Finalize:** Turn JPG export on or off and choose cropped or full-frame
+  copies. You can change the crop option in the Finalize sheet.
+- **General:** Set PhotoCull’s appearance or reveal the configuration file.
+  **Restore Defaults** resets the configuration, not appearance.
 
-Edits land in a draft: `validate()` problems (overlapping folders, empty or
-overlapping extension lists, non-folders) are shown inline, and Apply is disabled
-until they are fixed. Apply saves the config (`~/…` paths are written abbreviated),
-creates missing inbox/archive/exports folders, and reloads the library. Settings are
-read-only in disposable fixture mode and refused while a bulk file operation runs —
-the safety logic and `--check` diagnostics never write the config themselves.
+Settings shows invalid or overlapping folder paths and empty or overlapping
+extension lists. **Apply** is unavailable while there are errors or a bulk
+file operation is running. Apply saves the configuration and reloads the
+library. It creates missing folders and saves home paths as `~/…`.
+
+The configuration is read-only in disposable fixture mode. Safety checks do
+not change it. Outside fixture mode, `--check` can write a default configuration
+if the file is missing or unreadable.
 
 ### Verifying the UI without Screen Recording permission
 
