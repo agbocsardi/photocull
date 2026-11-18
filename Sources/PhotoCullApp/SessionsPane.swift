@@ -223,6 +223,12 @@ private struct SessionRowView: View {
             Button(isSelected ? "Deselect" : "Select for Multi-Finalize") {
                 app.toggleSelection(row.date)
             }
+            if row.total == 0 {
+                Divider()
+                Button("Remove Empty Sessions…") { app.beginRemoveEmptySessions(date: row.date) }
+                    .disabled(!app.canRemoveEmptySessions)
+                    .help("Remove finalized session folders that hold only their sidecar")
+            }
         }
     }
 

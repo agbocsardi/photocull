@@ -136,7 +136,7 @@ func suiteFinalizeSafety() throws {
     unchanged(sidecarPath.appendingPathComponent("original.JPG"), nestedSidecarBytes,
               "sidecar-directory replacement cannot be recursively deleted")
 
-    // Ordinary success retains decisions, even when they are the only remaining entry.
+    // Ordinary success removes the folder once only its sidecar remains.
     let complete = try folder("2025-04-01")
     let completeJPG = try write(complete, "A.JPG", 71)
     let completeRAW = try write(complete, "A.RAF", 72)
@@ -148,10 +148,10 @@ func suiteFinalizeSafety() throws {
     unchanged(archive(complete, "A.JPG"), completeJPG, "normal JPG bytes unchanged")
     unchanged(archive(complete, "A.RAF"), completeRAW, "normal RAW bytes unchanged")
     unchanged(archive(complete, "ORPHAN.RW2"), orphan, "orphan RAW bytes unchanged")
-    check(fm.fileExists(atPath: complete.path), "sidecar-only folder retained")
-    unchanged(complete.appendingPathComponent(Session.fileName), sidecar,
-              "ordinary success retains sidecar byte-for-byte")
-    check(result.retainedFolders.contains(canonicalPath(complete)), "retained folder reported")
+    // Success cleanup removes the emptied folder together with its sidecar;
+    // any other content (covered by the residual cases above) keeps it.
+    check(!fm.fileExists(atPath: complete.path), "sidecar-only folder removed after success")
+    checkEqual(result.retainedFolders, [], "no retained folders after successful cleanup")
     check(!fm.fileExists(atPath: cfg.paths.dump), "safety suite never creates dump root")
 
     let corrupt = try folder("2025-04-02")
@@ -170,6 +170,14 @@ func suiteFinalizeSafety() throws {
         _ = try Finalize.summary(cfg: cfg, date: "../escape")
         check(false, "traversal date rejected")
     } catch { check(true, "traversal date rejected") }
+
+    let leftover = try folder("2025-05-01")
+    let blocked = try folder("2025-05-02")
+    try sidecar.write(to: blocked.appendingPathComponent(".photocull-recovery.json"))
+    let candidates = Finalize.emptySessions(cfg: cfg, dates: [leftover.lastPathComponent, blocked.lastPathComponent])
+    checkEqual(candidates.map(\.date), [leftover.lastPathComponent], "only sidecar-only leftovers offered")
+    checkEqual(Finalize.removeEmptySessions(candidates), [leftover.lastPathComponent], "confirmed leftover removed")
+    retained(blocked)
 
     let empty = root.appendingPathComponent("no-sidecar")
     try fm.createDirectory(at: empty, withIntermediateDirectories: false)

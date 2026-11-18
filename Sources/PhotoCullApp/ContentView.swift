@@ -45,6 +45,7 @@ struct ContentView: View {
             case .guide:     GuideSheet()
             case .ingest:    IngestSheet()
             case .finalize, .globalFinalize: FinalizeSheet()
+            case .removeEmptySessions: RemoveEmptySessionsSheet()
             }
         }
         .onAppear {

@@ -63,7 +63,7 @@ func suiteFinalizeParallel() throws {
     }
     check(!fm.fileExists(atPath: arch.appendingPathComponent("R0001.JPG").path),
           "reject not archived")
-    check(fm.fileExists(atPath: folder.path), "inbox date folder retained after parallel run")
+    check(!fm.fileExists(atPath: folder.path), "sidecar-only inbox folder removed after parallel run")
 
     func pixelSize(_ url: URL) -> (w: Int, h: Int)? {
         guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
@@ -175,7 +175,7 @@ func suiteFinalizeParallel() throws {
     checkEqual(try Set(fm.contentsOfDirectory(atPath: dump2.path)),
                Set(["S0001.JPG", "S0002.JPG", "S0003.JPG"]),
                "re-run dump holds exactly the clean names, no _2 suffixes")
-    check(fm.fileExists(atPath: folder2.path), "re-run leaves the sidecar-only inbox folder retained")
+    check(!fm.fileExists(atPath: folder2.path), "re-run removes the sidecar-only inbox folder")
     check(tmpFiles(in: dump2).isEmpty, "no .tmp files after the successful re-run")
 }
 

@@ -121,6 +121,7 @@ struct ControlsSheet: View {
         ("Finalize session", ":f", "right-click a session ▸ Finalize…"),
         ("Finalize selected", ":F", "Finalize button in the toolbar"),
         ("Ingest from a card", ":i", "Ingest button in the toolbar"),
+        ("Remove empty sessions", "y / n", "Cull menu ▸ Remove Empty Sessions… (or right-click an empty session)"),
         ("Check RAW pairing", ":R", "Cull menu ▸ Re-pair RAW Files…"),
         ("Quit", ":q", "⌘Q"),
         ("Show this sheet", "?", "Help menu in the toolbar"),
@@ -274,6 +275,37 @@ struct FinalizeSheet: View {
         case 2: return Palette.reject
         case 3: return Palette.secondary
         default: return Palette.label
+        }
+    }
+}
+
+// MARK: - Empty session cleanup
+
+/// Confirmation for removing finalized leftovers: session folders that hold
+/// only their `.photocull.json` sidecar. Anything else in the folder keeps
+/// it, so only genuinely empty sessions are ever listed here.
+struct RemoveEmptySessionsSheet: View {
+    @EnvironmentObject var app: AppState
+
+    var body: some View {
+        SheetShell(title: "Remove Empty Sessions",
+                   subtitle: "These session folders have no photos left, only their .photocull.json. Removing them deletes that file and the folder.",
+                   width: 560) {
+            SheetGroup(title: "Empty sessions") {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(app.emptySessionDates, id: \.self) { date in
+                        Text(date)
+                            .font(Typo.mono)
+                            .foregroundStyle(Palette.secondary)
+                    }
+                }
+            }
+        } buttons: {
+            Button("Cancel") { app.modal = nil }
+                .keyboardShortcut(.cancelAction)
+            Button("Remove") { app.confirmRemoveEmptySessions() }
+                .keyboardShortcut(.defaultAction)
+                .help("Delete the listed sidecar-only session folders and their sidecars")
         }
     }
 }

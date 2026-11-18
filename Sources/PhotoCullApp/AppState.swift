@@ -31,6 +31,7 @@ enum Modal: Identifiable, Equatable {
     case finalize(date: String)
     case globalFinalize
     case ingest
+    case removeEmptySessions
 
     var id: String {
         switch self {
@@ -39,6 +40,7 @@ enum Modal: Identifiable, Equatable {
         case .finalize(let date): return "finalize-\(date)"
         case .globalFinalize: return "globalFinalize"
         case .ingest: return "ingest"
+        case .removeEmptySessions: return "removeEmptySessions"
         }
     }
 }
@@ -124,6 +126,7 @@ final class AppState: ObservableObject {
     @Published var selectedDates: Set<String> = []
     @Published var modal: Modal? {
         didSet {
+            if oldValue == .removeEmptySessions, modal != oldValue { emptySessionCandidates = [] }
             if case .preparing(let token) = bulkOperation,
                pendingFinalize?.token == token, modal != pendingFinalize?.modal {
                 pendingFinalize = nil
@@ -162,8 +165,12 @@ final class AppState: ObservableObject {
 
     @Published var finalizeStats: [FinalizeStats] = []
     @Published var cropExportMode: CropExportMode = .applyCrop
+    /// Sidecar-only session folders offered by the Remove Empty Sessions sheet.
+    @Published private var emptySessionCandidates: [Finalize.EmptySession] = []
+    var emptySessionDates: [String] { emptySessionCandidates.map(\.date) }
+    var canRemoveEmptySessions: Bool { !fixtureMode && bulkOperation == nil && modal == nil && !cropMode }
     /// Applies the `[finalize]` default until the finalize sheet overrides it.
-    enum BulkOperation: Equatable { case preparing(UUID), finalize(UUID), ingest(UUID), repair(UUID) }
+    enum BulkOperation: Equatable { case preparing(UUID), finalize(UUID), ingest(UUID), repair(UUID), emptyCleanup(UUID) }
     @Published private(set) var bulkOperation: BulkOperation?
     private struct PreparedFinalize {
         let token: UUID, cfg: PCConfig, dates: [String], modal: Modal
@@ -336,6 +343,7 @@ final class AppState: ObservableObject {
     func updateConfig(_ new: PCConfig) -> Bool {
         guard permitsOrdinaryIO() else { return false }
         guard bulkOperation == nil else { toastMessage("Wait for the file operation to finish"); return false }
+        guard modal != .removeEmptySessions else { return false }
         if let problem = new.validate().first { fail(problem); return false }
         guard flushPersist() else { return false }
         do {
@@ -898,6 +906,39 @@ final class AppState: ObservableObject {
         else if activeDate == nil, let first = sessions.first { open(date: first.date) }
     }
 
+    // MARK: - Empty session cleanup
+
+    /// Existing leftovers: inbox folders that now hold only their sidecar.
+    /// Refused in fixture mode and while any bulk file operation runs, like
+    /// every other file-changing action. The listing is exact — sessions with
+    /// extra files are never offered — and removal re-verifies each folder.
+    func beginRemoveEmptySessions(date: String? = nil) {
+        guard permitsOrdinaryIO(), canStartBulk(), modal == nil else { return }
+        let dates = sessions.filter { $0.total == 0 && (date == nil || $0.date == date) }.map(\.date)
+        emptySessionCandidates = Finalize.emptySessions(cfg: cfg, dates: dates)
+        guard !emptySessionCandidates.isEmpty else { toastMessage("No empty sessions to remove"); return }
+        modal = .removeEmptySessions
+    }
+
+    func confirmRemoveEmptySessions() {
+        guard permitsOrdinaryIO(), canStartBulk(), modal == .removeEmptySessions,
+              !emptySessionCandidates.isEmpty else { return }
+        let candidates = emptySessionCandidates, dates = emptySessionDates
+        if persistTask != nil, let activeDate, !dates.contains(activeDate), !flushPersist() { return }
+        let token = UUID()
+        bulkOperation = .emptyCleanup(token)
+        modal = nil
+        toastMessage("Removing empty sessions…")
+        Task {
+            let removed = (try? await Self.onNativeQueue { Finalize.removeEmptySessions(candidates) }) ?? []
+            guard bulkOperation == .emptyCleanup(token) else { return }
+            finishFileOperation(affected: Set(dates))
+            toastMessage(removed.count == dates.count
+                         ? "Removed \(removed.count) empty session\(removed.count == 1 ? "" : "s")"
+                         : "Removed \(removed.count) of \(dates.count) empty sessions")
+        }
+    }
+
     // MARK: - Ingest
 
     /// Shared entry guard, before even sidecar flush, card detection or external app access.
@@ -1116,6 +1157,10 @@ final class AppState: ObservableObject {
             return false
         case .finalize, .globalFinalize:
             if key.chars == "y" || key.isReturn { confirmFinalize(); return true }
+            if key.chars == "n" || key.isEscape { self.modal = nil; return true }
+            return false
+        case .removeEmptySessions:
+            if key.chars == "y" || key.isReturn { confirmRemoveEmptySessions(); return true }
             if key.chars == "n" || key.isEscape { self.modal = nil; return true }
             return false
         case .ingest:

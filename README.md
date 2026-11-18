@@ -260,9 +260,13 @@ finalize sheet. `Esc` or "Clear" in the inspector removes a crop.
    the common camera brands (RAF, RW2, CR2, CR3, NEF, ARW, DNG, ORF, PEF) so a stock
    config pairs most libraries. An existing config file keeps whatever it lists, and
    the extension lists are editable in the Settings window.
-4. **Finalize keeps sidecars.** Go deleted `.photocull.json` and the emptied inbox folder.
-   This port never unlinks a sidecar, so a finalized session's folder can remain with only
-   its sidecar; it shows as an empty session in the sidebar and is safe to delete by hand.
+4. **Finalize cleans up sidecar-only folders.** After a successful Finalize, PhotoCull
+   checks the pinned inbox folder. It only unlinks `.photocull.json` if it is the sole
+   entry and is a regular, single-link file. Recovery records, claims and other files
+   prevent cleanup. If a late arrival prevents the folder from being removed, the folder
+   is reported as retained; cleanup does not fail Finalize. Use *Cull ▸ Remove Empty
+   Sessions…* to review and remove older sidecar-only leftovers, or right-click an empty
+   session row to check that session alone.
 5. **Pair-consistent collision names.** If either the JPG or the RAW name already exists in
    the archive, both get the same `_2` suffix so the pair stays together.
 6. **No silent re-run after a failed Finalize.** See *Recovering from a failed Finalize*.
