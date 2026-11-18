@@ -45,7 +45,7 @@ custom harness (`Sources/PhotoCullTests/Harness.swift`) rather than `swift test`
 ## Install
 
 Download the latest `PhotoCull-<version>.dmg` from
-[Releases](https://github.com/agbocsardi/swift-photocull/releases), open it, and drag
+[Releases](https://github.com/agbocsardi/photocull/releases), open it, and drag
 **PhotoCull** onto **Applications**. Builds aren't signed with an Apple Developer ID, so
 the first launch is blocked: open **System Settings → Privacy & Security** and click
 **Open Anyway**. Requires macOS 14 or later.
