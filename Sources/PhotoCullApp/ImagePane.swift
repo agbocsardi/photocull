@@ -443,10 +443,9 @@ struct FloatingActionBar: View {
                    tip: app.hasCrop
                      ? (app.showCroppedPreview ? "Show the full frame" : "Show the saved crop")
                      : "Save a crop first to compare it with the full frame",
-                   filled: false) {
+                   filled: false, enabled: app.hasCrop) {
                 app.showCroppedPreview.toggle()
             }
-            .disabled(!app.hasCrop)
 
             action("rotate.left", tint: Palette.secondary,
                    tip: "Rotate a quarter turn left", filled: false) {

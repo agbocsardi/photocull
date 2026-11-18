@@ -151,20 +151,20 @@ struct StatusBar: View {
     @EnvironmentObject var loader: ImageLoader
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: Metric.elementGap) {
+        // One fixed-height row. Hints drop whole groups when the window is
+        // narrow (every action stays in the photo bar / menus); the inbox
+        // path yields first and truncates from the head.
+        HStack(spacing: Metric.elementGap) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: Metric.elementGap) { photoHints; otherHints }
                 photoHints
-                otherHints
-                Spacer(minLength: 0)
-                inbox
+                essentialHints
             }
-            VStack(alignment: .leading, spacing: 0) {
-                photoHints
-                otherHints
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+            Spacer(minLength: Metric.elementGap)
+            inbox.layoutPriority(-1)
         }
-        .padding(.horizontal, Metric.elementGap)
+        .padding(.horizontal, Metric.paneInset)
+        .frame(height: Metric.statusHeight)
         .background(Surface.chrome)
     }
 
@@ -208,6 +208,22 @@ struct StatusBar: View {
         .disabled(app.bulkOperation != nil)
     }
 
+    /// The shortest set, for the narrowest windows.
+    private var essentialHints: some View {
+        HStack(spacing: Metric.radiusBadge) {
+            if app.cropMode {
+                hint("⏎", "apply", "Save the crop and leave crop mode (Enter)") { app.commitCrop() }
+                hint("esc", "cancel", "Discard the crop changes (Esc)") { app.cancelCrop() }
+            } else {
+                hint("z", "keep", "Keep this photo and go to the next (z)") { app.mark(.keep) }
+                hint("x", "reject", "Reject this photo and go to the next (x)") { app.mark(.reject) }
+                hint("?", "help", "Show the keyboard and mouse help (?)") { app.modal = .help }
+            }
+        }
+        .fixedSize(horizontal: true, vertical: false)
+        .disabled(app.bulkOperation != nil)
+    }
+
     private var inbox: some View {
         HStack(spacing: Metric.elementGap) {
             if loader.isLoading {
@@ -219,7 +235,6 @@ struct StatusBar: View {
                 .lineLimit(1)
                 .truncationMode(.head)
         }
-        .fixedSize(horizontal: true, vertical: false)
     }
     private func hint(_ key: String, _ label: String, _ tip: String,
                       _ run: @escaping () -> Void) -> some View {
