@@ -145,31 +145,71 @@ struct ContentView: View {
 // MARK: - Status bar
 
 /// Thin bottom bar: key hints on the left, inbox location on the right.
+/// Hints are plain buttons, with the same Keycap + label treatment.
 struct StatusBar: View {
     @EnvironmentObject var app: AppState
     @EnvironmentObject var loader: ImageLoader
 
-    private var hints: [(String, String)] {
-        if app.cropMode {
-            return [("←↑↓→", "move"), ("⇧←↑↓→", "resize"), ("a", "aspect"),
-                    ("r", "reset"), ("⏎", "apply"), ("esc", "cancel")]
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: Metric.elementGap) {
+                photoHints
+                otherHints
+                Spacer(minLength: 0)
+                inbox
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                photoHints
+                otherHints
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        return [("z", "keep"), ("x", "reject"), ("c", "crop"), ("←/→", "prev/next"),
-                ("J/K", "undecided"), ("o", "preview"), ("1-4", "pane"),
-                ("tab", "filter"), (":f", "finalize"), ("?", "help")]
+        .padding(.horizontal, Metric.elementGap)
+        .background(Surface.chrome)
     }
 
-    var body: some View {
-        HStack(spacing: 12) {
-            ForEach(hints, id: \.0) { key, label in
-                HStack(spacing: 3) {
-                    Keycap(key: key)
-                    Text(label)
-                        .font(Typo.caption)
-                        .foregroundStyle(Palette.secondary)
-                }
+    private var photoHints: some View {
+        HStack(spacing: Metric.radiusBadge) {
+            if app.cropMode {
+                hint("a", "aspect", "Cycle the crop aspect ratio (a)") { app.cycleAspect() }
+                hint("r", "reset", "Reset the crop region to the full frame (r)") { app.resetCrop() }
+                hint("p", "preview", "Toggle the cropped preview (p)") { app.showCroppedPreview.toggle() }
+                hint("t", "reset tilt", "Reset the tilt to 0° (t)") { app.resetTilt() }
+            } else {
+                hint("z", "keep", "Keep this photo and go to the next (z)") { app.mark(.keep) }
+                hint("x", "reject", "Reject this photo and go to the next (x)") { app.mark(.reject) }
+                hint("c", "crop", "Enter crop mode (c)") { app.enterCropMode() }
+                hint("←", "prev", "Previous photo (← or k)") { app.nav(.prev) }
+                hint("→", "next", "Next photo (→)") { app.nav(.next) }
+                hint("K", "prev undec.", "Previous undecided photo (⇧K)") { app.nav(.prev, skipDecided: true) }
+                hint("J", "next undec.", "Next undecided photo (⇧J)") { app.nav(.next, skipDecided: true) }
             }
-            Spacer(minLength: 8)
+        }
+        .fixedSize(horizontal: true, vertical: false)
+        .disabled(app.bulkOperation != nil)
+    }
+
+    private var otherHints: some View {
+        HStack(spacing: Metric.radiusBadge) {
+            if app.cropMode {
+                hint("⏎", "apply", "Save the crop and leave crop mode (Enter)") { app.commitCrop() }
+                hint("esc", "cancel", "Discard the crop changes (Esc)") { app.cancelCrop() }
+            } else {
+                hint("o", "preview", "Open the current photo in Preview (o)") { app.openInPreview() }
+                hint("1-4", "pane", "Cycle keyboard focus between the four panes (1–4)") {
+                    app.focusedPane = Pane(rawValue: (app.focusedPane.rawValue % 4) + 1) ?? .sessions
+                }
+                hint("tab", "filter", "Cycle the session filter (Tab in the sidebar)") { app.cycleFilter() }
+                hint(":f", "finalize", "Finalize the current session (:f)") { app.beginFinalizeCurrent() }
+                hint("?", "help", "Show the keyboard and mouse help (?)") { app.modal = .help }
+            }
+        }
+        .fixedSize(horizontal: true, vertical: false)
+        .disabled(app.bulkOperation != nil)
+    }
+
+    private var inbox: some View {
+        HStack(spacing: Metric.elementGap) {
             if loader.isLoading {
                 ProgressView().controlSize(.mini).scaleEffect(0.55)
             }
@@ -179,9 +219,45 @@ struct StatusBar: View {
                 .lineLimit(1)
                 .truncationMode(.head)
         }
-        .padding(.horizontal, Metric.paneInset)
-        .frame(height: Metric.statusHeight)
-        .background(Surface.chrome)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+    private func hint(_ key: String, _ label: String, _ tip: String,
+                      _ run: @escaping () -> Void) -> some View {
+        StatusHintButton(key: key, label: label, tip: tip, run: run)
+            .disabled(app.commandMode)
+    }
+}
+
+/// One status-bar hint as a plain button: Keycap + label, hover background.
+private struct StatusHintButton: View {
+    let key: String
+    let label: String
+    let tip: String
+    let run: () -> Void
+
+    @StateObject private var hover = ViewState(false)
+
+    var body: some View {
+        Button(action: run) {
+            HStack(spacing: Metric.radiusBadge) {
+                Keycap(key: key)
+                Text(label)
+                    .font(Typo.caption)
+                    .foregroundStyle(Palette.secondary)
+            }
+            .padding(.horizontal, Metric.radiusBadge / 2)
+            .frame(height: Metric.statusHeight)
+            .contentShape(Rectangle())
+            .background(
+                RoundedRectangle(cornerRadius: Metric.radiusBadge, style: .continuous)
+                    .fill(hover.value ? Palette.hover : Color.clear)
+            )
+        }
+        .buttonStyle(.plain)
+        .focusable(false)
+        .onHover { hover.value = $0 }
+        .help(tip)
+        .accessibilityLabel(Text(tip))
     }
 }
 
