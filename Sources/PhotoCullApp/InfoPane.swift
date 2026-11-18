@@ -75,8 +75,7 @@ struct InfoPane: View {
                         }
 
                         group("Location") {
-                            Text(app.currentPair?.jpg.path
-                                    .replacingOccurrences(of: NSHomeDirectory(), with: "~") ?? "")
+                            Text(app.currentPair.map { PCConfig.abbreviateHome($0.jpg.path) } ?? "")
                                 .font(Typo.mono)
                                 .foregroundStyle(Palette.tertiary)
                                 .textSelection(.enabled)

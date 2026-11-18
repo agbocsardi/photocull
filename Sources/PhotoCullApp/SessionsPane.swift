@@ -14,13 +14,11 @@ struct SessionsPane: View {
                           trailing: { trailing })
 
             if app.visibleSessions.isEmpty {
-                EmptyState(icon: "photo.stack",
-                           title: app.sessions.isEmpty ? "No sessions" : "Nothing matches",
-                           message: app.sessions.isEmpty
-                             ? "Ingest photos from an SD card to start culling."
-                             : "No sessions match the “\(app.filter.label)” filter.",
-                           actionTitle: app.sessions.isEmpty ? "Ingest Photos…" : nil,
-                           action: app.sessions.isEmpty ? { app.beginIngest() } : nil)
+                if app.sessions.isEmpty {
+                    NoSessionsState()
+                } else {
+                    FilteredSessionsState(filterLabel: app.filter.label)
+                }
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
@@ -63,6 +61,85 @@ struct SessionsPane: View {
             .buttonStyle(.plain)
             .help("Show next session filter (Tab when Sessions is focused)")
         }
+    }
+}
+
+/// No sessions at all: the friendly first-run state — what to do first, and
+/// where the inbox lives. Ingest and Settings are both one click away.
+private struct NoSessionsState: View {
+    @EnvironmentObject var app: AppState
+
+    private var inboxPath: String {
+        PCConfig.abbreviateHome(app.cfg.paths.inbox)
+    }
+
+    var body: some View {
+        VStack(spacing: Metric.elementGap + 2) {
+            Image(systemName: "photo.stack")
+                .font(Typo.iconLarge)
+                .foregroundStyle(Palette.quaternary)
+            Text("No Sessions Yet")
+                .font(Typo.title3)
+                .foregroundStyle(Palette.secondary)
+            Text("Ingest photos from an SD card — each capture date becomes a session you can cull.")
+                .font(Typo.callout)
+                .foregroundStyle(Palette.tertiary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 320)
+            HStack(spacing: 12) {
+                Button("Ingest Photos…") { app.beginIngest() }
+                    .buttonStyle(ToolbarButtonStyle(prominent: true))
+                    .help("Copy photos from an SD card into the inbox (⌘⇧I)")
+                Button("Open Settings…") { openSettings() }
+                    .buttonStyle(ToolbarButtonStyle())
+                    .help("PhotoCull Settings (⌘,) — folders, file types, finalize defaults")
+            }
+            .padding(.top, 2)
+            Text(inboxPath)
+                .font(Typo.mono)
+                .foregroundStyle(Palette.tertiary)
+                .lineLimit(1)
+                .truncationMode(.head)
+                .padding(.top, 2)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(Metric.sectionGap)
+    }
+
+    /// Opens the Settings window. The settings UI is a real SwiftUI `Settings`
+    /// scene (agent A); `showSettingsWindow:` is the action SwiftUI's own
+    /// SettingsLink fires on macOS 14.
+    private func openSettings() {
+        NSApp.sendAction(Selector(("showSettingsWindow:")), to: nil, from: nil)
+    }
+}
+
+/// Sessions exist, but the filter hides them all: short message plus a
+/// one-click way back to the full list.
+private struct FilteredSessionsState: View {
+    @EnvironmentObject var app: AppState
+    let filterLabel: String
+
+    var body: some View {
+        VStack(spacing: Metric.elementGap + 2) {
+            Image(systemName: "line.3.horizontal.decrease.circle")
+                .font(Typo.iconLarge)
+                .foregroundStyle(Palette.quaternary)
+            Text("No Sessions Match")
+                .font(Typo.title3)
+                .foregroundStyle(Palette.secondary)
+            Text("The \(filterLabel) filter hides every session right now.")
+                .font(Typo.callout)
+                .foregroundStyle(Palette.tertiary)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 320)
+            Button("Show All") { app.filter = .all }
+                .buttonStyle(ToolbarButtonStyle())
+                .help("Clear the session filter (Tab cycles it when Sessions is focused)")
+                .padding(.top, 2)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(Metric.sectionGap)
     }
 }
 

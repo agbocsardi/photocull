@@ -80,6 +80,18 @@ PhotoCull --repair-pairs  # dry run: report RAW files broken by the old naming b
 PhotoCull --repair-pairs --apply
 ```
 
+### Getting started
+
+On first launch PhotoCull shows a short **Getting Started** guide — what the
+app is for, the Ingest → Cull → Crop → Finalize workflow, where files live,
+and the safety promises (the card is never modified, originals are never
+modified, rejects go to the Trash). Reopen it any time from the toolbar
+**Help** menu or **Help ▸ PhotoCull Getting Started**.
+
+**Controls** (`?`) lists every action with both its key and its mouse path —
+every button in the photo bar and the crop bar is named there, so the app is
+fully drivable without memorising a single key.
+
 ## Layout
 
 ```
@@ -183,7 +195,7 @@ inspect the interface from a terminal or an agent context.
 | `Space` | select a session for multi-finalize (pane 1) |
 | `Enter` | open the selected session / apply the crop |
 | `:f` `:F` `:i` `:c` `:R` `:q` | finalize / finalize all / ingest / crop / repair pairs / quit |
-| `?` | help |
+| `?` | controls |
 
 **Crop mode:** arrows move the region, `Shift`+arrows resize, drag the handles with the mouse,
 `a` cycles the aspect ratio, `r` resets to full frame, `p` toggles the cropped preview,
@@ -248,6 +260,26 @@ finalize sheet. `Esc` or "Clear" in the inspector removes a crop.
    the common camera brands (RAF, RW2, CR2, CR3, NEF, ARW, DNG, ORF, PEF) so a stock
    config pairs most libraries. An existing config file keeps whatever it lists, and
    the extension lists are editable in the Settings window.
+4. **Finalize keeps sidecars.** Go deleted `.photocull.json` and the emptied inbox folder.
+   This port never unlinks a sidecar, so a finalized session's folder can remain with only
+   its sidecar; it shows as an empty session in the sidebar and is safe to delete by hand.
+5. **Pair-consistent collision names.** If either the JPG or the RAW name already exists in
+   the archive, both get the same `_2` suffix so the pair stays together.
+6. **No silent re-run after a failed Finalize.** See *Recovering from a failed Finalize*.
+
+## Recovering from a failed Finalize
+
+If a Finalize is interrupted (crash, full disk, failed export), PhotoCull leaves a
+`.photocull-recovery.json` and a `.photocull-claims-…` folder in that session's inbox folder
+and refuses to finalize the session again until you resolve them:
+
+1. Open the session folder in Finder (right-click the session, or *Reveal in Finder*).
+2. Read `.photocull-recovery.json`: it lists every planned move. The claims folder's
+   `.progress.jsonl` records which steps completed.
+3. Move any photo files found inside the claims folder back into the session folder
+   (they were claimed but not yet archived or trashed). Check the archive and Trash for
+   pairs that already moved.
+4. Delete `.photocull-recovery.json` and the (now file-free) claims folder, then finalize again.
 
 ## Not implemented
 

@@ -27,6 +27,7 @@ enum SessionFilter: Int, CaseIterable {
 
 enum Modal: Identifiable, Equatable {
     case help
+    case guide
     case finalize(date: String)
     case globalFinalize
     case ingest
@@ -34,6 +35,7 @@ enum Modal: Identifiable, Equatable {
     var id: String {
         switch self {
         case .help: return "help"
+        case .guide: return "guide"
         case .finalize(let date): return "finalize-\(date)"
         case .globalFinalize: return "globalFinalize"
         case .ingest: return "ingest"
@@ -195,6 +197,10 @@ final class AppState: ObservableObject {
     /// Debounced sidecar write for navigation (trailing edge, ~500 ms).
     private var persistTask: Task<Void, Never>?
     private static let appearanceKey = "PhotoCull.appearance"
+    /// One-time flag for the Getting Started guide. Read through
+    /// `string(forKey:)` only: the fixture startup checks compile AppState
+    /// against a UserDefaults shadow without `bool(forKey:)`.
+    private static let hasSeenGuideKey = "PhotoCull.hasSeenGuide"
 
     private func applyAppearance() {
         // Fixture appearance is transient; SwiftUI/AppKit state uses its unique bundle domain.
@@ -227,6 +233,19 @@ final class AppState: ObservableObject {
         // `beginIngest` detects (and defaults `ingestSource`) when needed.
         reloadLibrary()
         if openInitialSession, let first = sessions.first { open(date: first.date) }
+    }
+
+    /// One-time Getting Started guide on the very first launch. Called from
+    /// the window's first appearance — never from `init`, which the headless
+    /// checks also run and where a modal would block their first action.
+    /// Fixture mode has no user to teach, and a `--snapshot` run must
+    /// capture the plain window (and not consume the one-time flag).
+    func presentFirstLaunchGuide() {
+        guard !fixtureMode, !CommandLine.arguments.contains("--snapshot") else { return }
+        let seen = AppDefaults.store.string(forKey: Self.hasSeenGuideKey)
+        guard seen == nil else { return }
+        AppDefaults.store.set(true, forKey: Self.hasSeenGuideKey)
+        modal = .guide
     }
 
     // MARK: - Derived
@@ -1089,6 +1108,11 @@ final class AppState: ObservableObject {
         switch modal {
         case .help:
             if key.isEscape || key.chars == "?" { self.modal = nil; return true }
+            return false
+        case .guide:
+            // Esc closes the guide; `?` jumps straight to the Controls sheet.
+            if key.isEscape { self.modal = nil; return true }
+            if key.chars == "?" { self.modal = .help; return true }
             return false
         case .finalize, .globalFinalize:
             if key.chars == "y" || key.isReturn { confirmFinalize(); return true }

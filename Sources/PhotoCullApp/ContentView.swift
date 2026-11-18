@@ -41,7 +41,8 @@ struct ContentView: View {
         .background(CullWindowTag())
         .sheet(item: $app.modal) { modal in
             switch modal {
-            case .help:      HelpSheet()
+            case .help:      ControlsSheet()
+            case .guide:     GuideSheet()
             case .ingest:    IngestSheet()
             case .finalize, .globalFinalize: FinalizeSheet()
             }
@@ -57,6 +58,9 @@ struct ContentView: View {
                 app.enterCropMode()
                 app.canvas.cropRect = CropRect(x: 0.14, y: 0.08, w: 0.62, h: 0.78)
             }
+            // First launch only: teach the workflow once. Deferred a tick so
+            // the window is fully presented before the sheet attaches.
+            DispatchQueue.main.async { app.presentFirstLaunchGuide() }
         }
     }
 
@@ -138,12 +142,15 @@ struct ContentView: View {
             }
             .help("Appearance: \(app.appearance.title). Choose System, Light, or Dark")
 
-            Button {
-                app.modal = .help
+            Menu {
+                Button("Getting Started…") { app.modal = .guide }
+                    .help("What PhotoCull is, the workflow, and where files live")
+                Button("Controls") { app.modal = .help }
+                    .help("Every action with its key and its mouse path (?)")
             } label: {
                 Label("Help", systemImage: "questionmark.circle")
             }
-            .help("Keyboard shortcuts (?)")
+            .help("Getting Started guide and the Controls reference")
         }
     }
 }
@@ -235,7 +242,7 @@ struct StatusBar: View {
             if loader.isLoading {
                 ProgressView().controlSize(.mini).scaleEffect(0.55)
             }
-            Text(app.cfg.paths.inbox.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
+            Text(PCConfig.abbreviateHome(app.cfg.paths.inbox))
                 .font(Typo.mono)
                 .foregroundStyle(Palette.secondary)
                 .lineLimit(1)

@@ -108,7 +108,7 @@ Use `CGImageSourceCreateWithURL` + `CGImageSourceCopyPropertiesAtIndex`.
    folder. With `.original` copy bytes; with `.applyCrop` and a non-full-frame crop,
    write a re-encoded cropped JPEG via `ImagePipeline.export` and count it in `cropped`.
 4. Orphan RAWs → archive.
-5. Delete `.photocull.json`, then delete the inbox date folder.
+5. Keep `.photocull.json` (never unlinked, to avoid an enumerate/unlink race) and remove the inbox date folder only if it is empty; a sidecar-only folder is retained and reported in `retainedFolders`.
 6. Name collisions in archive/dump get a `_2`, `_3`… suffix.
 
 `trash`: use `FileManager.trashItem(at:resultingItemURL:)`; fall back to moving into

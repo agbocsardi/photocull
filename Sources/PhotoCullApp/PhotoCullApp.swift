@@ -80,6 +80,12 @@ struct PhotoCullApp: App {
                 Button("Re-pair RAW Files…") { app.repairPairingInteractive() }
                     .disabled(app.sessions.isEmpty)
             }
+            // The standard “PhotoCull Help” search item is replaced by the
+            // app's own guide — the Controls sheet already answers “which key?”.
+            CommandGroup(replacing: .help) {
+                Button("PhotoCull Getting Started") { app.modal = .guide }
+                    .help("What PhotoCull is, the workflow, and where files live")
+            }
         }
 
         // The real macOS settings window (⌘,): Folders / Files / Finalize /
