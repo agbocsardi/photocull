@@ -59,6 +59,18 @@ PhotoCull --repair-pairs  # dry run: report RAW files broken by the old naming b
 PhotoCull --repair-pairs --apply
 ```
 
+### Getting started
+
+On first launch PhotoCull shows a short **Getting Started** guide — what the
+app is for, the Ingest → Cull → Crop → Finalize workflow, where files live,
+and the safety promises (the card is never modified, originals are never
+modified, rejects go to the Trash). Reopen it any time from the toolbar
+**Help** menu or **Help ▸ PhotoCull Getting Started**.
+
+**Controls** (`?`) lists every action with both its key and its mouse path —
+every button in the photo bar and the crop bar is named there, so the app is
+fully drivable without memorising a single key.
+
 ## Layout
 
 ```
@@ -138,7 +150,7 @@ inspect the interface from a terminal or an agent context.
 | `Space` | select a session for multi-finalize (pane 1) |
 | `Enter` | open the selected session / apply the crop |
 | `:f` `:F` `:i` `:c` `:R` `:q` | finalize / finalize all / ingest / crop / repair pairs / quit |
-| `?` | help |
+| `?` | controls |
 
 **Crop mode:** arrows move the region, `Shift`+arrows resize, drag the handles with the mouse,
 `a` cycles the aspect ratio, `r` resets to full frame, `p` toggles the cropped preview,

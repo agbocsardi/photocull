@@ -74,87 +74,102 @@ struct SheetGroup<Content: View>: View {
     }
 }
 
-// MARK: - Help
+// MARK: - Controls
 
-/// Shortcut cheat sheet, grouped by category, in the macOS idiom.
-struct HelpSheet: View {
+/// Control reference, grouped by area. Each row names the action, its key,
+/// and its mouse path, so the app can be driven either way — no key needs to
+/// be memorised to use PhotoCull.
+struct ControlsSheet: View {
     @EnvironmentObject var app: AppState
 
-    private let actions: [(String, String)] = [
-        ("z", "Mark keep (press again to undo)"),
-        ("x", "Mark reject (press again to undo)"),
-        ("c", "Crop the current photo"),
-        ("o", "Open in Preview"),
-        ("f", "Reveal in Finder"),
-        (":f", "Finalize the current session"),
-        (":F", "Finalize selected sessions"),
-        (":i", "Ingest photos from an SD card"),
-        (":R", "Check and repair RAW pairing"),
+    private let culling: [(String, String, String)] = [
+        ("Keep", "z", "✓ button in the photo bar"),
+        ("Reject", "x", "✗ button in the photo bar"),
+        ("Undo / redo", "⌘Z / ⇧⌘Z", "Edit menu"),
+        ("Rotate", "–", "rotate buttons in the bar"),
+        ("Open in Preview", "o", "Preview button in the bar"),
+        ("Reveal in Finder", "f", "folder button in the bar"),
     ]
-    private let navigation: [(String, String)] = [
-        ("j / k · → / ←", "Next / previous photo"),
-        ("↓ / ↑", "Next / previous photo, or session in sidebar"),
-        ("J / K", "Next / previous undecided photo"),
-        ("1 – 4", "Focus sidebar, photo, info, filmstrip"),
-        ("Enter", "Open the selected session"),
-        ("Tab", "Cycle the session filter"),
-        ("Space", "Select a session for multi-finalize"),
-        ("+ / −", "Zoom in / out"),
-        ("0", "Fit to window"),
-        ("Esc", "Cancel a crop, close, or clear the selection"),
-        ("click", "Same keys, by mouse — see below"),
+    private let navigation: [(String, String, String)] = [
+        ("Next / prev photo", "j / k", "‹ › buttons in the photo bar"),
+        ("Next / prev undecided", "J / K", "next-undecided button in the bar"),
+        ("Jump to a photo", "← / →", "click a filmstrip thumbnail"),
+        ("Focus a pane", "1 – 4", "click the pane"),
+        ("Zoom in / out", "+ / −", "zoom buttons in the bar"),
+        ("Fit to window", "0", "fit button in the bar"),
+        ("Pan (when zoomed)", "drag", "drag the photo"),
     ]
-    private let mouse: [(String, String)] = [
-        ("click", "Session opens · filmstrip jumps · pane takes focus"),
-        ("⌘ + click", "Multi-select a session (Space)"),
-        ("buttons", "Keep, reject, crop, zoom in the floating bar"),
-        ("right-click", "Session menu: open, finalize, select"),
+    private let crop: [(String, String, String)] = [
+        ("Move the region", "arrows", "drag inside the region"),
+        ("Resize the region", "⇧ arrows", "drag a handle"),
+        ("Cycle the aspect", "a", "aspect picker in the crop bar"),
+        ("Reset the region", "r", "Reset button in the crop bar"),
+        ("Cropped preview", "p", "preview toggle in the crop bar"),
+        ("Tilt by 0.25°", ", / .", "tilt slider in the crop bar"),
+        ("Reset the tilt", "t", "reset button in the crop bar"),
+        ("Apply", "⏎", "Apply button in the crop bar"),
+        ("Cancel", "esc", "Cancel button in the crop bar"),
     ]
-    private let crop: [(String, String)] = [
-        ("← ↑ ↓ →", "Move the crop region"),
-        ("⇧ + arrows", "Resize the crop region"),
-        ("drag", "Move or resize with the mouse"),
-        ("⇧ + drag", "Resize while keeping the aspect ratio"),
-        ("tilt slider", "Drag it, or focus it and use ← → (⇧ for 1°)"),
-        (", / .", "Tilt by 0.25° (⇧ for 1°)"),
-        ("t", "Reset the tilt"),
-        ("⌘Z / ⇧⌘Z", "Undo / redo"),
-        ("a", "Cycle the aspect ratio"),
-        ("r", "Reset the crop to the full frame"),
-        ("p", "Toggle the cropped preview"),
-        ("Enter", "Apply the crop"),
+    private let sessions: [(String, String, String)] = [
+        ("Open a session", "⏎", "click it in the sidebar"),
+        ("Select for finalize", "Space", "⌘-click a session"),
+        ("Session menu", "–", "right-click a session"),
+        ("Cycle the filter", "Tab", "filter chip in the sidebar"),
+        ("Finalize session", ":f", "Finalize button in the toolbar"),
+        ("Finalize selected", ":F", "Finalize button in the toolbar"),
+        ("Ingest from a card", ":i", "Ingest button in the toolbar"),
+        ("Show this sheet", "?", "Help menu in the toolbar"),
+        ("Close a sheet", "esc", "Done / Cancel"),
     ]
 
     var body: some View {
-        SheetShell(title: "Keyboard Shortcuts",
-                   subtitle: "Crop is non-destructive: originals are never modified. Every key action has a mouse equivalent.",
+        SheetShell(title: "Controls",
+                   subtitle: "Every action with its key and its mouse path. Crop is non-destructive: originals are never modified.",
                    width: 860) {
             HStack(alignment: .top, spacing: 16) {
-                column("Actions", actions)
-                column("Navigation", navigation)
-                column("Crop", crop)
-                column("Mouse", mouse)
+                VStack(alignment: .leading, spacing: 16) {
+                    column("Culling", culling)
+                    column("Crop", crop)
+                }
+                VStack(alignment: .leading, spacing: 16) {
+                    column("Navigation", navigation)
+                    column("Sessions & files", sessions)
+                }
             }
         } buttons: {
+            Button("Getting Started…") { app.modal = .guide }
+                .help("What PhotoCull is and the whole workflow")
             Button("Done") { app.modal = nil }
                 .keyboardShortcut(.defaultAction)
         }
     }
 
-    private func column(_ title: String, _ rows: [(String, String)]) -> some View {
+    private func column(_ title: String, _ rows: [(String, String, String)]) -> some View {
         SheetGroup(title: title) {
             VStack(alignment: .leading, spacing: 6) {
-                ForEach(rows, id: \.0) { key, label in
-                    HStack(alignment: .top, spacing: 8) {
-                        Keycap(key: key)
-                            .frame(width: 62, alignment: .leading)
-                        Text(label)
-                            .font(Typo.callout)
-                            .foregroundStyle(Palette.label)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                    controlRow(row.0, row.1, row.2)
                 }
             }
+        }
+    }
+
+    /// "Keep — z — ✓ button in the photo bar": action left, keycap in the
+    /// middle, mouse path right, so all three stay scannable in columns.
+    private func controlRow(_ action: String, _ key: String, _ mouse: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(action)
+                .font(Typo.callout)
+                .foregroundStyle(Palette.label)
+                .frame(width: 130, alignment: .leading)
+                .fixedSize(horizontal: false, vertical: true)
+            Keycap(key: key)
+                .frame(width: 74, alignment: .leading)
+            Text(mouse)
+                .font(Typo.callout)
+                .foregroundStyle(Palette.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
         }
     }
 }
