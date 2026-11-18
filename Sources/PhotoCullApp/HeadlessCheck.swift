@@ -2,11 +2,24 @@ import Foundation
 import PhotoCullCore
 
 /// `PhotoCull --check` — exercises the real stack (config, library, EXIF, image
-/// decode) against the user's actual inbox without opening a window.
+/// decode) against the configured inbox without opening a window. In DEV mode
+/// (any non-installed executable) that is the throwaway dev library only.
 enum HeadlessCheck {
+    /// One-line notice printed by both headless tools in DEV mode: the run is
+    /// sandboxed to ~/Library/Caches/PhotoCull-Dev and cannot see real data.
+    static func printDevNotice() {
+        guard LibraryMode.current == .dev else { return }
+        print("DEV mode — this run operates on the development library only:")
+        print("  \(LibraryMode.devRoot)")
+        print("Your real library and config are never read or written.")
+        print("Install PhotoCull in /Applications to use your real library.")
+        print("")
+    }
+
     /// `PhotoCull --repair-pairs [--apply]` — fix RAW files renamed to `_2` by the
     /// Go app's stem-keyed collision rule, so JPG+RAW pairs work again.
     static func repairPairs(apply: Bool) -> Int32 {
+        printDevNotice()
         let cfg = PCConfig.load()
         do {
             let report = apply
@@ -40,6 +53,7 @@ enum HeadlessCheck {
     }
 
     static func run() -> Int32 {
+        printDevNotice()
         let cfg = PCConfig.load()
         print("config:  \(PCConfig.configPath)")
         print("inbox:   \(cfg.paths.inbox)")

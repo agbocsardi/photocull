@@ -10,7 +10,7 @@ mkdir -p "$OUT/tool/sources" "$OUT/tool/module-cache" "$OUT/tool/clang-module-ca
   "$OUT/tool/cache" "$OUT/tool/config" "$OUT/tool/security" "$OUT/tool/tmp"
 export TMPDIR="$OUT/tool/tmp/" CLANG_MODULE_CACHE_PATH="$OUT/tool/clang-module-cache"
 export SWIFTPM_MODULECACHE_OVERRIDE="$OUT/tool/module-cache" XDG_CACHE_HOME="$OUT/tool/cache"
-CORE=(Config Session FilePair Library Exif ImagePipeline FinalizeSafety Finalize)
+CORE=(LibraryMode Config Session FilePair Library Exif ImagePipeline FinalizeSafety Finalize)
 for name in "${CORE[@]}"; do cp "$REPO/Sources/PhotoCullCore/$name.swift" "$OUT/tool/sources/"; done
 # Keep the exact inspected startup/CLI/ingest evidence alongside the compiled subset.
 for name in PhotoCullApp AppState HeadlessCheck Snapshot Overlays ContentView MenuBarView StartupConfiguration; do

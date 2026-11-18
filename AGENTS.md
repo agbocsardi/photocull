@@ -1,0 +1,32 @@
+# PhotoCull agent rules
+
+AI agents develop this app on the owner's machine. The owner's real photo library
+(`~/Pictures/PhotoCull`) and real config (`~/.config/photocull`) are LIVE DATA.
+
+## Hard rules
+
+- **Never write under `~/Pictures` or `~/.config/photocull`.** Do not create,
+  modify, or delete anything there, in any script, build step, or command.
+- **Never install into `/Applications` or `~/Applications`**, and never copy or
+  move the app there. Do not mount a built DMG with the intent of installing.
+- **Never run the installed app** (the copy in `/Applications`), and never launch
+  any PhotoCull binary in a way that could reach real data.
+- Dev builds are automatically sandboxed to the dev library at
+  `~/Library/Caches/PhotoCull-Dev/` (see `Sources/PhotoCullCore/LibraryMode.swift`
+  and the README "Install" section): `swift run`, `.build/*/PhotoCull`,
+  `dist/PhotoCull.app` and DMG-attached copies all resolve to DEV mode and cannot
+  touch the real library or config. The only REAL-mode executable is
+  `/Applications/PhotoCull.app` (or `~/Applications/PhotoCull.app`) with bundle id
+  `local.photocull.swift` — and launching that is the owner's job, not an agent's.
+- Until a change to the mode gate is verified, run any PhotoCull binary with
+  `HOME=$(mktemp -d)`. After changing startup/config code, verify with
+  `find ~/Pictures/PhotoCull ~/.config/photocull -newer <marker>` (marker created
+  before the run) that nothing real changed.
+
+## Why
+
+Dev runs must never be able to reach real data.
+The library-mode gate exists
+to enforce that. Do not weaken it: fixture mode
+(`StartupConfiguration`) takes precedence, and DEV is the default for anything
+that is not the installed bundle.

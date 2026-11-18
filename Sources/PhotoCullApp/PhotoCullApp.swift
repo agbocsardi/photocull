@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import PhotoCullCore
 
 @main
 enum PhotoCullMain {
@@ -12,6 +13,15 @@ enum PhotoCullMain {
             FileHandle.standardError.write(Data("PhotoCull: \(error.localizedDescription)\n".utf8))
             exit(2)
         }
+        // Data-safety gate, decided once, before any config is loaded or
+        // AppState exists. Fixture mode (resolved above) takes precedence;
+        // otherwise REAL is only the installed /Applications (or
+        // ~/Applications) bundle - every other executable is DEV and can
+        // never reach the real library or real config.
+        LibraryMode.current = StartupConfiguration.current.isFixture
+            ? .fixture
+            : LibraryMode.detect(bundleIdentifier: Bundle.main.bundleIdentifier,
+                                  bundlePath: Bundle.main.bundleURL.path)
         if args.contains("--repair-pairs") {
             exit(HeadlessCheck.repairPairs(apply: args.contains("--apply")))
         }

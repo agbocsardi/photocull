@@ -95,6 +95,9 @@ final class AppState: ObservableObject {
 
     /// Fixture startup has already validated an explicit config and disposable bundle identity.
     let fixtureMode: Bool
+    /// True when this run is sandboxed to the throwaway dev library (never the
+    /// real one); drives the DEV LIBRARY badge in the toolbar.
+    var isDevLibrary: Bool { !fixtureMode && LibraryMode.current == .dev }
     @Published private(set) var cfg: PCConfig
     @Published var sessions: [SessionRow] = []
 
@@ -198,9 +201,9 @@ final class AppState: ObservableObject {
         // Fixture appearance is transient; SwiftUI/AppKit state uses its unique bundle domain.
         if !fixtureMode {
             if appearance == .system {
-                UserDefaults.standard.removeObject(forKey: Self.appearanceKey)
+                AppDefaults.store.removeObject(forKey: Self.appearanceKey)
             } else {
-                UserDefaults.standard.set(appearance.rawValue, forKey: Self.appearanceKey)
+                AppDefaults.store.set(appearance.rawValue, forKey: Self.appearanceKey)
             }
         }
         NSApplication.shared.appearance = appearance.nsAppearance
@@ -214,7 +217,7 @@ final class AppState: ObservableObject {
         self.operationHooks = operationHooks
         self.cfg = cfg ?? PCConfig.load()
         if initializeAppearance && !fixtureMode {
-            let saved = UserDefaults.standard.string(forKey: Self.appearanceKey) ?? "system"
+            let saved = AppDefaults.store.string(forKey: Self.appearanceKey) ?? "system"
             appearance = AppAppearance(rawValue: saved) ?? .system
             applyAppearance()
         }

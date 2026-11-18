@@ -43,6 +43,27 @@ open dist/PhotoCull.app
 XCTest is not available in a CommandLineTools-only toolchain, so tests run through a small
 custom harness (`Sources/PhotoCullTests/Harness.swift`) rather than `swift test`.
 
+## Install
+
+```bash
+./scripts/build-dmg.sh         # runs build-app.sh, then packs dist/PhotoCull.dmg
+open dist/PhotoCull.dmg       # then drag PhotoCull.app onto the Applications folder
+```
+
+The DMG contains `PhotoCull.app` and an `Applications` symlink — the standard macOS
+drag-to-Applications install. **Only the app installed in `/Applications` (or
+`~/Applications`) uses your real library** (`~/Pictures/PhotoCull`, `~/.config/photocull`).
+
+Every other executable is a **dev build** — `swift run`, `.build/*/PhotoCull`,
+`dist/PhotoCull.app`, anything run from a mounted DMG — and is hard-sandboxed to a
+throwaway library at `~/Library/Caches/PhotoCull-Dev/` (config, inbox, archive and
+export all live under it, and a dev config pointing outside that root is
+regenerated). Dev builds show a **DEV LIBRARY** badge in the toolbar and their
+preferences go to a separate `local.photocull.swift.dev` suite, so a development
+run can never read or write the real library or real config. Delete the folder to
+reset it; `scripts/seed-dev-library.sh` fills the dev inbox with synthetic
+JPG+RAW sessions.
+
 ### Known toolchain constraint
 
 The `@State` SwiftUI macro needs the `SwiftUIMacros` plugin, which ships only with Xcode.

@@ -32,6 +32,8 @@ private final class Calls: @unchecked Sendable {
     func reset() { lock.lock(); defer { lock.unlock() }; values = [:] }
 }
 final class UserDefaults {
+    init() {}
+    init?(suiteName: String) { nil }
     static let standard = UserDefaults()
     func string(forKey: String) -> String? { Calls.shared.add("preferences"); return nil }
     func set(_ value: Any?, forKey: String) { Calls.shared.add("preferences") }

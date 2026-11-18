@@ -25,7 +25,7 @@ BIN="$OUT/scratch/release"
 for group in generator check-core startup operation navigation negative-format negative-identity negative-guard negative-preferences; do
   mkdir -p "$OUT/$group/swift-cache" "$OUT/$group/clang-cache"
 done
-CORE=(Config Session FilePair Library Exif ImagePipeline FinalizeSafety Finalize)
+CORE=(LibraryMode Config Session FilePair Library Exif ImagePipeline FinalizeSafety Finalize)
 SOURCES=(); for name in "${CORE[@]}"; do SOURCES+=("$REPO/Sources/PhotoCullCore/$name.swift"); done
 CLANG_MODULE_CACHE_PATH="$OUT/generator/clang-cache" \
   swiftc -O -swift-version 5 -package-name "$PACKAGE" -parse-as-library \

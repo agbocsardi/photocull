@@ -108,8 +108,12 @@ func suiteConfig() throws {
     checkEqual(PCConfig.load(from: corruptURL), PCConfig.defaultConfig().expandedForTest,
                "corrupt file → defaults")
 
-    // ── configPath points at ~/.config/photocull/config.toml ──
-    checkEqual(PCConfig.configPath, home + "/.config/photocull/config.toml", "configPath shape")
+    // ── configPath resolves from the startup library-mode gate ──
+    LibraryMode.current = .real
+    checkEqual(PCConfig.configPath, home + "/.config/photocull/config.toml", "real configPath shape")
+    LibraryMode.current = .dev
+    checkEqual(PCConfig.configPath, home + "/Library/Caches/PhotoCull-Dev/config/config.toml", "dev configPath shape")
+    LibraryMode.current = .dev
 }
 
 extension PCConfig {

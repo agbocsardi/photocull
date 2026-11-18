@@ -35,17 +35,62 @@ public struct PCConfig: Codable, Sendable, Equatable {
             files: FilesConfig(rawExtensions: ["RAF", "RW2"], jpgExtensions: ["JPG", "JPEG"]))
     }
 
-    /// Absolute path of the config file: `~/.config/photocull/config.toml`.
+    /// Absolute path of the config file. REAL/fixture mode (installed app):
+    /// `~/.config/photocull/config.toml`. DEV mode: the throwaway config under
+    /// `~/Library/Caches/PhotoCull-Dev/config/config.toml` — development runs
+    /// can never read or write the real config.
     public static var configPath: String {
-        URL(fileURLWithPath: NSHomeDirectory())
+        if LibraryMode.current == .dev {
+            return LibraryMode.devRoot + "/config/config.toml"
+        }
+        return URL(fileURLWithPath: NSHomeDirectory())
             .appendingPathComponent(".config")
             .appendingPathComponent("photocull")
             .appendingPathComponent("config.toml").path
     }
 
     /// Load config, creating the default file when missing. `~/` is expanded.
+    /// In DEV mode this never touches the real config: it loads (and creates
+    /// if missing) the throwaway config under the dev root, and regenerates it
+    /// if it ever points outside that root.
     public static func load() -> PCConfig {
-        load(from: URL(fileURLWithPath: configPath))
+        guard LibraryMode.current == .dev else {
+            return load(from: URL(fileURLWithPath: configPath))
+        }
+        return loadDev()
+    }
+
+    /// Default DEV config: every path pinned inside the dev root.
+    static func devDefaultConfig() -> PCConfig {
+        let root = URL(fileURLWithPath: LibraryMode.devRoot)
+        return PCConfig(paths: PathsConfig(inbox: root.appendingPathComponent("inbox").path,
+                                           archive: root.appendingPathComponent("archive").path,
+                                           dump: root.appendingPathComponent("export").path),
+                        files: FilesConfig(rawExtensions: ["RAF", "RW2"], jpgExtensions: ["JPG", "JPEG"]))
+    }
+
+    /// DEV loader. The dev config is generated with dev-root paths when
+    /// missing, and a config whose paths point outside the dev root (e.g. at
+    /// the real library) is refused and regenerated — dev must never be
+    /// configurable to point at real folders.
+    static func loadDev() -> PCConfig {
+        let url = URL(fileURLWithPath: LibraryMode.devRoot + "/config/config.toml")
+        var cfg = devDefaultConfig()
+        if let data = try? Data(contentsOf: url), let text = String(data: data, encoding: .utf8) {
+            applyTOML(TOMLParser.parse(text), into: &cfg)
+            cfg.paths.inbox = expandHome(cfg.paths.inbox)
+            cfg.paths.archive = expandHome(cfg.paths.archive)
+            cfg.paths.dump = expandHome(cfg.paths.dump)
+            let contained = [cfg.paths.inbox, cfg.paths.archive, cfg.paths.dump]
+                .allSatisfy { LibraryMode.devContains($0) }
+            if !contained {
+                cfg = devDefaultConfig()
+                try? writeDefaultConfig(cfg, to: url)
+            }
+        } else {
+            try? writeDefaultConfig(cfg, to: url)
+        }
+        return cfg
     }
 
     /// Load config from an explicit file path (testable variant of `load()`).

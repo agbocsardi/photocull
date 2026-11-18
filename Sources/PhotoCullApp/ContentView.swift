@@ -65,6 +65,12 @@ struct ContentView: View {
         // Counter + current file + state, centred in the unified toolbar.
         ToolbarItem(placement: .principal) {
             HStack(spacing: 8) {
+                if app.isDevLibrary {
+                    DecisionBadge(text: "DEV LIBRARY", color: Palette.warning, compact: true)
+                        .help("DEV library: \(LibraryMode.devRoot)\n"
+                              + "Dev builds never touch your real photo library or real config.\n"
+                              + "Install PhotoCull in Applications to use your real library.")
+                }
                 if app.activeDate != nil {
                     Text("[\(app.pairs.isEmpty ? 0 : app.index + 1)/\(app.pairs.count)]")
                         .font(Typo.number)
