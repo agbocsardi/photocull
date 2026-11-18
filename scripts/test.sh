@@ -1,6 +1,5 @@
-#!/usr/bin/env bash
-# Run the core test suite. Exits non-zero on failure.
+#!/bin/bash
+# Everyday headless checks; fixture startup is opt-in via check-all.sh.
 set -euo pipefail
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-cd "$ROOT"
-exec swift run PhotoCullTests
+if [[ $# != 0 ]]; then echo "usage: ${0##*/}" >&2; exit 2; fi
+exec "$(dirname -- "$0")/check-all.sh"

@@ -3,6 +3,7 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 import PhotoCullCore
+@testable import PhotoCullAppChecks
 
 @MainActor
 private func check(_ condition: @autoclosure () -> Bool, _ message: String) {

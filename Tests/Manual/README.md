@@ -9,18 +9,18 @@ launch the ordinary dist app for this workflow, or replace its saved config.**
 - `scripts/prepare-manual-finalize-fixture.sh`: generate only six JPEGs, proposed
   TOML, manifest, pure image-export probe, checker and this checklist in a fresh
   canonical `/private/tmp/photocull-manual-fixture-*` root. No app bundle/release build.
-- `scripts/check-fixture-startup.sh`: full isolated release compile, focused native
-  startup/ownership/I/O guard checks with effective negative controls, existing
-  focused operation/navigation regressions, and an ad-hoc signed **separate**
-  `PhotoCullFixture.app`. Build/check products live in fresh canonical
-  `/private/tmp/photocull-manual-launch-*` roots. It generates another fresh launch
-  fixture as the eventual writable GUI target, never the read-only shared inputs.
-  Candidate/fixture paths, unique bundle ID, hash, signature log and proposed
-  launch command are recorded in its output. The script never executes PhotoCull.
+- `scripts/check-fixture-startup.sh` (also via `scripts/check-all.sh --with-fixture-startup`):
+  native startup/ownership/I/O guard checks with effective negative controls,
+  operation/navigation regressions, and an ad-hoc signed **separate**
+  `PhotoCullFixture.app`. Debug binaries and compiler caches are reused from
+  `.build/checks/`; the candidate and logs live in a fresh canonical
+  `/private/tmp/photocull-manual-launch-*` root. A separate fresh data fixture is
+  the eventual writable GUI target, never the read-only shared inputs. The output
+  records the candidate and fixture paths, unique bundle ID, hash, signature log
+  and proposed launch command. The script never executes PhotoCull.
 
-No installs, dependencies, framework additions, shared `.build`, dist replacement,
-ordinary diagnostics, cards, native Trash or GUI actions. Native macOS APIs only.
-Every compiler/SwiftPM/Clang cache/config/security/temp output is isolated. Existing
+No installs, dependencies, framework additions, dist replacement, ordinary
+diagnostics, cards, native Trash or GUI actions. Native macOS APIs only. Existing
 shared preparation roots are hashed read-only before/after and never modified.
 Do not use `scripts/build-app.sh` here (it writes shared build/dist outputs).
 

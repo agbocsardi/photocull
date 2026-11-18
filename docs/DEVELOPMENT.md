@@ -16,7 +16,24 @@ open dist/PhotoCull.app
 XCTest is not available in a CommandLineTools-only toolchain, so tests run through a small
 custom harness (`Sources/PhotoCullTests/Harness.swift`) rather than `swift test`.
 
-Focused checks in `scripts/check-*.sh` cover edit rendering, image loading, navigation, ingest collectors, Finalize planning and safety, and fixture startup. Run the relevant script from the repository root, for example `./scripts/check-finalize-safety.sh`.
+### Headless checks
+
+```bash
+./scripts/test.sh                            # everyday: core and focused checks
+./scripts/check-all.sh                       # same checks once each, before releases
+./scripts/check-all.sh --with-fixture-startup  # add startup checks and negative controls
+```
+
+Both commands reuse an incremental debug build at `.build/checks/`. Run with
+`--with-fixture-startup` for startup, config, `LibraryMode`, or fixture changes.
+This also prepares a disposable app bundle for review; it never launches PhotoCull.
+The release workflow still runs only `swift run PhotoCullTests`.
+
+The individual `scripts/check-*.sh` commands remain available. They use fresh
+synthetic data in `/tmp`, outside the build cache. To retain artifacts from a
+regular check, set `OUT` to a dedicated absolute directory under `/tmp`; the
+script creates a fresh child there. The fixture-startup script retains its logs
+and candidate in a separate `/private/tmp/photocull-manual-launch-*` directory.
 
 ## Packaging and releases
 

@@ -2,6 +2,7 @@ import Foundation
 import Darwin
 import CoreGraphics
 import PhotoCullCore
+@testable import PhotoCullAppChecks
 
 private final class Box<T>: @unchecked Sendable {
     private let lock = NSLock()
