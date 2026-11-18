@@ -1,11 +1,10 @@
 # PhotoCull Swift — Core Spec (port of the Go app)
 
-Reference implementation: `../photocull/` (Go).
+Reference implementation: the Go `photocull` app (sibling repository).
 The Swift core must be **behaviourally identical** and **data-compatible**.
 
 Build/test loop (no Xcode, CommandLineTools only — XCTest is NOT available):
 
-    cd swift-photocull
     swift build
     swift run PhotoCullTests      # exit 0 = pass
 

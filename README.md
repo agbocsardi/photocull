@@ -10,8 +10,7 @@ can work on the same library.
 
 ## Status
 
-Working end to end. Verified by 326 automated checks plus a headless run against a real
-inbox (`swift run PhotoCull --check`).
+Working end to end, covered by the automated checks below.
 
 | Area | State |
 |------|-------|

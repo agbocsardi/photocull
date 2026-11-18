@@ -25,8 +25,6 @@ AI agents develop this app on the owner's machine. The owner's real photo librar
 
 ## Why
 
-Dev runs must never be able to reach real data.
-The library-mode gate exists
-to enforce that. Do not weaken it: fixture mode
-(`StartupConfiguration`) takes precedence, and DEV is the default for anything
-that is not the installed bundle.
+Dev runs must never be able to reach real data. The library-mode gate enforces
+that; do not weaken it: fixture mode (`StartupConfiguration`) takes precedence,
+and DEV is the default for anything that is not the installed bundle.

@@ -7,3 +7,7 @@ DerivedData/
 dist/
 .DS_Store
 *.xcuserstate
+
+# Local plans, logs and audits stay out of the public repo
+*_TODO.md
+docs/performance-audit.md
