@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 /// A single key press, normalised for the cull keymap.
 struct KeyEvent {
@@ -42,6 +43,12 @@ final class KeyMonitor {
     var handler: ((KeyEvent) -> Bool)?
     /// When true, all keys are passed straight through (e.g. a sheet is up).
     var suspended = false
+    /// Every window hosting ContentView registers itself (see `CullWindowTag`).
+    /// Keys typed in any other window (Settings, menu-bar panel) belong to that
+    /// window's controls, not the cull keymap. Weak, and re-registered when a
+    /// closed cull window is reopened, so nothing goes stale. Sheets are
+    /// checked via their parent.
+    let cullWindows = NSHashTable<NSWindow>.weakObjects()
 
     private var monitor: Any?
 
@@ -60,6 +67,15 @@ final class KeyMonitor {
 
     private func route(_ event: NSEvent) -> Bool {
         guard !suspended, let handler else { return false }
+
+        // The cull keymap belongs to the cull window (and its sheets) only.
+        // The Settings scene is a separate key window: keys pressed there —
+        // whether in a text field or any other focused control — must reach
+        // that window, never the cull map.
+        if let window = event.window,
+           !cullWindows.contains(window.sheetParent ?? window.parent ?? window) {
+            return false
+        }
 
         // Never steal keys from a focused text field / editor.
         if let responder = NSApp.keyWindow?.firstResponder,
@@ -97,4 +113,16 @@ final class KeyMonitor {
         )
         return handler(key)
     }
+}
+
+/// Zero-size view that registers its hosting window as a cull window.
+struct CullWindowTag: NSViewRepresentable {
+    final class TagView: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let window { KeyMonitor.shared.cullWindows.add(window) }
+        }
+    }
+    func makeNSView(context: Context) -> TagView { TagView() }
+    func updateNSView(_ nsView: TagView, context: Context) {}
 }

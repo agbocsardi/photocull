@@ -82,6 +82,13 @@ struct PhotoCullApp: App {
             }
         }
 
+        // The real macOS settings window (⌘,): Folders / Files / Finalize /
+        // General tabs, edited as a draft and applied through updateConfig.
+        Settings {
+            SettingsRoot()
+                .environmentObject(connectedApp)
+        }
+
         // Its ordinary menu contains a direct Finder action; do not insert it in fixture mode.
         MenuBarExtra(isInserted: .constant(!app.fixtureMode)) {
             MenuBarView()

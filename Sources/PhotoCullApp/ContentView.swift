@@ -38,11 +38,11 @@ struct ContentView: View {
         .background(Palette.window)
         .toolbar { toolbarContent }
         .overlay(alignment: .bottom) { ToastView() }
+        .background(CullWindowTag())
         .sheet(item: $app.modal) { modal in
             switch modal {
             case .help:      HelpSheet()
             case .ingest:    IngestSheet()
-            case .settings:  HelpSheet()
             case .finalize, .globalFinalize: FinalizeSheet()
             }
         }

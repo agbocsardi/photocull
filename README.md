@@ -130,6 +130,30 @@ Use the **Appearance** button in the toolbar to choose **System** (default), **L
 saved in its app preferences (`PhotoCull.appearance`); it does not change the Go app's config.
 The menu-bar outline remains a system-tinted template icon in every mode.
 
+### Settings
+
+Open **PhotoCull > Settings** (⌘,) to edit `config.toml`.
+
+- **Folders:** Use **Choose…** to change the inbox, archive or exports folder.
+  Use **Reveal** to find it in Finder. PhotoCull uses the new folder without
+  moving or renaming existing files.
+- **Files:** Separate RAW and JPG extensions with commas. PhotoCull saves them
+  in uppercase without dots. Files pair by filename, excluding the extension.
+- **Finalize:** Turn JPG export on or off and choose cropped or full-frame
+  copies. You can change the crop option in the Finalize sheet.
+- **General:** Set PhotoCull’s appearance or reveal the configuration file.
+  **Restore Defaults** resets the configuration, not appearance.
+
+Settings shows invalid or overlapping folder paths and empty or overlapping
+extension lists. **Apply** is unavailable while there are errors or a bulk
+file operation is running. Apply saves the configuration and reloads the
+library. It creates missing folders and saves home paths as `~/…`.
+
+The configuration is read-only in disposable fixture mode. Safety checks do
+not change it. `--check` can write a default configuration if the file is
+missing or unreadable — in development builds only the dev library's. In a
+development build, Settings accepts only folders inside the dev library.
+
 ### Verifying the UI without Screen Recording permission
 
 ```bash
@@ -186,7 +210,8 @@ finalize sheet. `Esc` or "Clear" in the inspector removes a crop.
 
 | Thing | Location |
 |-------|----------|
-| Config | `~/.config/photocull/config.toml` (TOML, same keys as the Go app) |
+| Config | `~/.config/photocull/config.toml` (TOML, shared shape with the Go app plus a `[finalize]` section) |
+| Finalize defaults | `[finalize]` in the config — `export_jpgs` (keeper JPG copies on/off), `crop_export` (`crop`/`original`) |
 | Inbox | `~/Pictures/PhotoCull/inbox/<YYYY-MM-DD>/` |
 | Archive | `~/Pictures/PhotoCull/archive/<YYYY-MM-DD>/` |
 | Dump | `~/Downloads/<date>/` (or `<first> to <last>` for multi-session) |
@@ -204,6 +229,10 @@ finalize sheet. `Esc` or "Clear" in the inspector removes a crop.
    `--repair-pairs` fixes libraries already damaged by the old rule.
 2. **`j`/`k` direction.** The Go app's `keys.js` maps `j` to *previous* while its own README
    and footer say next/previous. This port uses the vim convention: `j` = next, `k` = previous.
+3. **RAW extension defaults.** Go shipped only `RAF` and `RW2`; the port's defaults cover
+   the common camera brands (RAF, RW2, CR2, CR3, NEF, ARW, DNG, ORF, PEF) so a stock
+   config pairs most libraries. An existing config file keeps whatever it lists, and
+   the extension lists are editable in the Settings window.
 
 ## Not implemented
 

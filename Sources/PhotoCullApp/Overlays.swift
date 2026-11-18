@@ -199,19 +199,30 @@ struct FinalizeSheet: View {
                         .foregroundStyle(Palette.warning)
                 }
 
-                SheetGroup(title: "Copies to \(app.cfg.paths.dump.replacingOccurrences(of: NSHomeDirectory(), with: "~"))") {
-                    Picker("", selection: $app.cropExportMode) {
-                        Text("Keep JPGs with the crop applied")
-                            .help("Apply saved crops to exported copies; originals stay unchanged")
-                            .tag(CropExportMode.applyCrop)
-                        Text("Keep the original JPGs")
-                            .help("Export full-frame JPG copies without applying saved crops")
-                            .tag(CropExportMode.original)
+                SheetGroup(title: app.cfg.finalize.exportJPGs
+                           ? "JPG Copies to \(PCConfig.abbreviateHome(app.cfg.paths.dump))"
+                           : "JPG Copies") {
+                    if app.cfg.finalize.exportJPGs {
+                        Picker("", selection: $app.cropExportMode) {
+                            Text("Apply Saved Crops")
+                                .help("Apply saved crops to JPG copies.")
+                                .tag(CropExportMode.applyCrop)
+                            Text("Full-Frame Copies")
+                                .help("Export JPG copies without applying crops.")
+                                .tag(CropExportMode.original)
+                        }
+                        .pickerStyle(.radioGroup)
+                        .labelsHidden()
+                        .font(Typo.callout)
+                        .help("Only exported copies are cropped.")
+                    } else {
+                        Label("JPG export is off in Settings. " +
+                              "Finalize archives keepers and moves rejects to the Trash.",
+                              systemImage: "tray")
+                            .font(Typo.callout)
+                            .foregroundStyle(Palette.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
-                    .pickerStyle(.radioGroup)
-                    .labelsHidden()
-                    .font(Typo.callout)
-                    .help("Crop settings affect only exported JPG copies, not the originals")
                 }
             }
         } buttons: {
@@ -219,7 +230,9 @@ struct FinalizeSheet: View {
                 .keyboardShortcut(.cancelAction)
             Button("Finalize") { app.confirmFinalize() }
                 .keyboardShortcut(.defaultAction)
-                .help("Move rejects to Trash and keepers to the archive; export keeper JPGs")
+                .help(app.cfg.finalize.exportJPGs
+                      ? "Move rejects to the Trash and keepers to the archive. Export JPG copies of keepers."
+                      : "Move rejects to the Trash and keepers to the archive.")
         }
     }
 
