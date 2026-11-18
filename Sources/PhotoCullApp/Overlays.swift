@@ -289,7 +289,7 @@ struct RemoveEmptySessionsSheet: View {
 
     var body: some View {
         SheetShell(title: "Remove Empty Sessions",
-                   subtitle: "These finalized sessions hold only their sidecar and no photos. Removing one deletes that sidecar and the folder.",
+                   subtitle: "These session folders have no photos left, only their .photocull.json. Removing them deletes that file and the folder.",
                    width: 560) {
             SheetGroup(title: "Empty sessions") {
                 VStack(alignment: .leading, spacing: 4) {
