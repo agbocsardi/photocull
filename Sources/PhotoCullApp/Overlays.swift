@@ -85,15 +85,16 @@ struct ControlsSheet: View {
     private let culling: [(String, String, String)] = [
         ("Keep", "z", "✓ button in the photo bar"),
         ("Reject", "x", "✗ button in the photo bar"),
-        ("Undo / redo", "⌘Z / ⇧⌘Z", "Edit menu"),
+        ("Undo / redo", "⌘Z", "⇧⌘Z redoes; no mouse path"),
+        ("Crop the photo", "c", "crop button in the photo bar"),
         ("Rotate", "–", "rotate buttons in the bar"),
         ("Open in Preview", "o", "Preview button in the bar"),
         ("Reveal in Finder", "f", "folder button in the bar"),
     ]
     private let navigation: [(String, String, String)] = [
-        ("Next / prev photo", "j / k", "‹ › buttons in the photo bar"),
+        ("Next / prev photo", "→ / ←", "‹ › buttons in the photo bar (also j / k)"),
         ("Next / prev undecided", "J / K", "next-undecided button in the bar"),
-        ("Jump to a photo", "← / →", "click a filmstrip thumbnail"),
+        ("Jump to a photo", "–", "click a filmstrip thumbnail"),
         ("Focus a pane", "1 – 4", "click the pane"),
         ("Zoom in / out", "+ / −", "zoom buttons in the bar"),
         ("Fit to window", "0", "fit button in the bar"),
@@ -101,7 +102,8 @@ struct ControlsSheet: View {
     ]
     private let crop: [(String, String, String)] = [
         ("Move the region", "arrows", "drag inside the region"),
-        ("Resize the region", "⇧ arrows", "drag a handle"),
+        ("Move faster", "⇧ arrows", "–"),
+        ("Resize the region", "–", "drag a handle (⇧ keeps the aspect)"),
         ("Cycle the aspect", "a", "aspect picker in the crop bar"),
         ("Reset the region", "r", "Reset button in the crop bar"),
         ("Cropped preview", "p", "preview toggle in the crop bar"),
@@ -114,10 +116,13 @@ struct ControlsSheet: View {
         ("Open a session", "⏎", "click it in the sidebar"),
         ("Select for finalize", "Space", "⌘-click a session"),
         ("Session menu", "–", "right-click a session"),
-        ("Cycle the filter", "Tab", "filter chip in the sidebar"),
-        ("Finalize session", ":f", "Finalize button in the toolbar"),
+        ("Cycle the filter", "Tab", "filter chip (Tab when Sessions has focus)"),
+        ("Clear selection", "esc", "click the “N ✕” chip in the sidebar"),
+        ("Finalize session", ":f", "right-click a session ▸ Finalize…"),
         ("Finalize selected", ":F", "Finalize button in the toolbar"),
         ("Ingest from a card", ":i", "Ingest button in the toolbar"),
+        ("Check RAW pairing", ":R", "Cull menu ▸ Re-pair RAW Files…"),
+        ("Quit", ":q", "⌘Q"),
         ("Show this sheet", "?", "Help menu in the toolbar"),
         ("Close a sheet", "esc", "Done / Cancel"),
     ]
