@@ -151,7 +151,7 @@ func suiteFinalizeSafety() throws {
     check(fm.fileExists(atPath: complete.path), "sidecar-only folder retained")
     unchanged(complete.appendingPathComponent(Session.fileName), sidecar,
               "ordinary success retains sidecar byte-for-byte")
-    check(result.retainedFolders.contains(complete.path), "retained folder reported")
+    check(result.retainedFolders.contains(canonicalPath(complete)), "retained folder reported")
     check(!fm.fileExists(atPath: cfg.paths.dump), "safety suite never creates dump root")
 
     let corrupt = try folder("2025-04-02")

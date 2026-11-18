@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 /// Tiny test harness (XCTest is unavailable in a CommandLineTools-only toolchain).
 
@@ -64,6 +65,24 @@ public func touch(_ url: URL, bytes: Int = 8) throws {
     try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
                                             withIntermediateDirectories: true)
     try Data(repeating: 0x41, count: bytes).write(to: url)
+}
+
+/// Kernel-canonical path spelling (realpath of the deepest existing ancestor,
+/// plus any not-yet-existing suffix) — matches how Core's Finalize canonicalises
+/// configured roots before reporting paths, so expectations can compare against
+/// the spelling the product actually returns on symlinked roots like /var.
+public func canonicalPath(_ url: URL) -> String {
+    var ancestor = url.path, suffix = ""
+    while ancestor != "/" {
+        var st = stat()
+        if lstat(ancestor, &st) == 0 { break }
+        guard errno == ENOENT else { return url.path }
+        suffix = "/" + (ancestor as NSString).lastPathComponent + suffix
+        ancestor = (ancestor as NSString).deletingLastPathComponent
+    }
+    guard let resolved = realpath(ancestor, nil) else { return url.path }
+    defer { free(resolved) }
+    return String(cString: resolved) + suffix
 }
 
 /// URL of the bundled fixture images (the photocull repo's test JPEGs).
