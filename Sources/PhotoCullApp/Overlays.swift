@@ -230,7 +230,9 @@ struct FinalizeSheet: View {
                 .keyboardShortcut(.cancelAction)
             Button("Finalize") { app.confirmFinalize() }
                 .keyboardShortcut(.defaultAction)
-                .help("Move rejects to Trash and keepers to the archive; export keeper JPGs")
+                .help(app.cfg.finalize.exportJPGs
+                      ? "Move rejects to Trash and keepers to the archive; export keeper JPGs"
+                      : "Move rejects to Trash and keepers to the archive")
         }
     }
 

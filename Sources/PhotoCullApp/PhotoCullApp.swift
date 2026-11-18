@@ -122,9 +122,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
-        // The one main-capable window at launch is the cull window; KeyMonitor
-        // ignores keys typed in later-opened windows (Settings, panels).
-        KeyMonitor.shared.cullWindow = NSApp.windows.first(where: { $0.canBecomeMain })
         KeyMonitor.shared.start()
         if !StartupConfiguration.current.isFixture {
             Snapshot.applyRequestedAppearance()

@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 /// A single key press, normalised for the cull keymap.
 struct KeyEvent {
@@ -42,11 +43,12 @@ final class KeyMonitor {
     var handler: ((KeyEvent) -> Bool)?
     /// When true, all keys are passed straight through (e.g. a sheet is up).
     var suspended = false
-    /// The main cull window. Keys typed in any other window (the Settings
-    /// scene, panels) belong to that window's controls, not the cull keymap.
-    /// Sheets are child windows of it, so modal keys keep working. Latched
-    /// once at launch; if nil, routing falls back to the permissive behaviour.
-    weak var cullWindow: NSWindow?
+    /// Every window hosting ContentView registers itself (see `CullWindowTag`).
+    /// Keys typed in any other window (Settings, menu-bar panel) belong to that
+    /// window's controls, not the cull keymap. Weak, and re-registered when a
+    /// closed cull window is reopened, so nothing goes stale. Sheets are
+    /// checked via their parent.
+    let cullWindows = NSHashTable<NSWindow>.weakObjects()
 
     private var monitor: Any?
 
@@ -70,7 +72,8 @@ final class KeyMonitor {
         // The Settings scene is a separate key window: keys pressed there —
         // whether in a text field or any other focused control — must reach
         // that window, never the cull map.
-        if let cull = cullWindow, event.window !== cull, event.window?.parent !== cull {
+        if let window = event.window,
+           !cullWindows.contains(window.sheetParent ?? window.parent ?? window) {
             return false
         }
 
@@ -110,4 +113,16 @@ final class KeyMonitor {
         )
         return handler(key)
     }
+}
+
+/// Zero-size view that registers its hosting window as a cull window.
+struct CullWindowTag: NSViewRepresentable {
+    final class TagView: NSView {
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let window { KeyMonitor.shared.cullWindows.add(window) }
+        }
+    }
+    func makeNSView(context: Context) -> TagView { TagView() }
+    func updateNSView(_ nsView: TagView, context: Context) {}
 }

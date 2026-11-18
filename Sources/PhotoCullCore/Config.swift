@@ -239,12 +239,28 @@ public struct PCConfig: Codable, Sendable, Equatable {
     public func save(to url: URL = URL(fileURLWithPath: configPath)) throws {
         try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
                                                 withIntermediateDirectories: true)
-        try toTOML().data(using: .utf8)?.write(to: url, options: .atomic)
+        try Data(toTOML().utf8).write(to: url, options: .atomic)
     }
 
     /// Human-readable problems with this configuration, for the settings
     /// window to show inline before Apply. Pure: the filesystem is inspected
     /// read-only and nothing is created.
+    /// Path used only to compare folders: symlinks in the deepest existing
+    /// ancestor resolved via realpath, lowercased because APFS is
+    /// case-insensitive by default (a false "same folder" beats a missed one).
+    static func comparablePath(_ path: String) -> String {
+        var head = (path as NSString).standardizingPath, tail: [String] = []
+        while true {
+            if let resolved = realpath(head, nil) {
+                head = String(cString: resolved); free(resolved); break
+            }
+            if head == "/" { break }
+            tail.insert((head as NSString).lastPathComponent, at: 0)
+            head = (head as NSString).deletingLastPathComponent
+        }
+        return ([head] + tail).joined(separator: "/").replacingOccurrences(of: "//", with: "/").lowercased()
+    }
+
     public func validate() -> [String] {
         var problems: [String] = []
 
@@ -265,7 +281,7 @@ public struct PCConfig: Codable, Sendable, Equatable {
                !isDirectory.boolValue {
                 problems.append("\(name) path exists but is not a folder: \(Self.abbreviateHome(expanded)).")
             }
-            return (expanded as NSString).standardizingPath
+            return Self.comparablePath(expanded)
         }
 
         let existing: [(String, String)] = [

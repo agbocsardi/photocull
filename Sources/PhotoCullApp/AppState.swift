@@ -330,6 +330,7 @@ final class AppState: ObservableObject {
         applied.paths.archive = PCConfig.expandHome(applied.paths.archive)
         applied.paths.dump = PCConfig.expandHome(applied.paths.dump)
         clearActiveSession()
+        undoStack.removeAll(); redoStack.removeAll(); selectedDates.removeAll()
         cfg = applied
         cropExportMode = applied.finalize.cropExportMode
         reloadLibrary()
