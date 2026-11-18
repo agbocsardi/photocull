@@ -44,10 +44,21 @@ custom harness (`Sources/PhotoCullTests/Harness.swift`) rather than `swift test`
 
 ## Install
 
+Download the latest `PhotoCull-<version>.dmg` from
+[Releases](https://github.com/agbocsardi/swift-photocull/releases), open it, and drag
+**PhotoCull** onto **Applications**. Builds aren't signed with an Apple Developer ID, so
+the first launch is blocked: open **System Settings → Privacy & Security** and click
+**Open Anyway**. Requires macOS 14 or later.
+
+To build the DMG yourself:
+
 ```bash
 ./scripts/build-dmg.sh         # runs build-app.sh, then packs dist/PhotoCull.dmg
 open dist/PhotoCull.dmg       # then drag PhotoCull.app onto the Applications folder
 ```
+
+**Releasing:** push a tag such as `v1.1.0`. `.github/workflows/release.yml` runs the tests,
+builds a universal (Apple silicon + Intel) DMG and publishes it as a GitHub Release.
 
 The DMG contains `PhotoCull.app` and an `Applications` symlink — the standard macOS
 drag-to-Applications install. **Only the app installed in `/Applications` (or

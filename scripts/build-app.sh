@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
 # Build PhotoCull.app — a real macOS app bundle assembled from the SwiftPM product.
 # Usage: scripts/build-app.sh [debug|release]
+# Optional env: UNIVERSAL=1 builds arm64+x86_64 (needs Xcode); VERSION=1.2.3 stamps Info.plist.
 set -euo pipefail
 
 CONF="${1:-release}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-echo "==> swift build -c $CONF --product PhotoCull"
-swift build -c "$CONF" --product PhotoCull
+ARCH_FLAGS=()
+if [ "${UNIVERSAL:-0}" = 1 ]; then ARCH_FLAGS=(--arch arm64 --arch x86_64); fi
 
-BIN="$(swift build -c "$CONF" --show-bin-path)"
+echo "==> swift build -c $CONF --product PhotoCull ${ARCH_FLAGS[*]:-}"
+swift build -c "$CONF" --product PhotoCull ${ARCH_FLAGS[@]+"${ARCH_FLAGS[@]}"}
+
+BIN="$(swift build -c "$CONF" ${ARCH_FLAGS[@]+"${ARCH_FLAGS[@]}"} --show-bin-path)"
 APP="$ROOT/dist/PhotoCull.app"
 
 rm -rf "$APP"
@@ -18,6 +22,10 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BIN/PhotoCull" "$APP/Contents/MacOS/PhotoCull"
 cp "$ROOT/resources/Info.plist" "$APP/Contents/Info.plist"
 chmod +x "$APP/Contents/MacOS/PhotoCull"
+if [ -n "${VERSION:-}" ]; then
+  plutil -replace CFBundleShortVersionString -string "$VERSION" "$APP/Contents/Info.plist"
+  plutil -replace CFBundleVersion -string "${BUILD_NUMBER:-$VERSION}" "$APP/Contents/Info.plist"
+fi
 
 # App icon (build it first with scripts/build-icon.sh)
 if [ -f "$ROOT/resources/PhotoCull.icns" ]; then

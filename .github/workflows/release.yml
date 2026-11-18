@@ -1,0 +1,59 @@
+name: Release
+
+# Push a tag like v1.1.0 to build, test and publish a DMG on GitHub Releases.
+# Run it manually (Actions → Release → Run workflow) for a dry run that only
+# uploads the DMG as a workflow artifact.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use the newest Xcode on the runner
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode*.app | sort -V | tail -1)" && swift --version
+
+      - name: Test
+        run: swift run PhotoCullTests
+
+      - name: Build universal DMG
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          [ "$GITHUB_REF_TYPE" = tag ] || VERSION="0.0.0-dev.$GITHUB_RUN_NUMBER"
+          UNIVERSAL=1 VERSION="$VERSION" BUILD_NUMBER="$GITHUB_RUN_NUMBER" scripts/build-dmg.sh
+          mv dist/PhotoCull.dmg "dist/PhotoCull-$VERSION.dmg"
+          echo "DMG=dist/PhotoCull-$VERSION.dmg" >> "$GITHUB_ENV"
+
+      - name: Upload DMG (dry run)
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: PhotoCull-dmg
+          path: ${{ env.DMG }}
+
+      - name: Publish release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > notes.md <<'EOF'
+          ## Install
+
+          1. Download the DMG below, open it, and drag **PhotoCull** onto **Applications**.
+          2. Open PhotoCull from Applications. macOS says it can't verify the app,
+             because this build isn't signed with an Apple Developer ID.
+          3. Open **System Settings → Privacy & Security**, scroll down, and click
+             **Open Anyway** next to PhotoCull. You only need to do this once per version.
+
+          Requires macOS 14 or later. Runs on Apple silicon and Intel Macs.
+          EOF
+          gh release create "$GITHUB_REF_NAME" "$DMG" \
+            --title "PhotoCull $GITHUB_REF_NAME" \
+            --notes-file notes.md --generate-notes
