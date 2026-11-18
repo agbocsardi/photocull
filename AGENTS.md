@@ -23,6 +23,13 @@ AI agents develop this app on the owner's machine. The owner's real photo librar
   `find ~/Pictures/PhotoCull ~/.config/photocull -newer <marker>` (marker created
   before the run) that nothing real changed.
 
+## Headless checks
+
+- Run `scripts/test.sh` for everyday changes and `scripts/check-all.sh` before a release.
+- For startup, config, `LibraryMode` or fixture changes, add `--with-fixture-startup`
+  to `scripts/check-all.sh`. It prepares a disposable candidate but never launches it.
+- The release workflow runs only `swift run PhotoCullTests`.
+
 ## Why
 
 Dev runs must never be able to reach real data. The library-mode gate enforces

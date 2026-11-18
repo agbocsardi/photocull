@@ -1,6 +1,7 @@
 import Foundation
 import CoreGraphics
 import PhotoCullCore
+@testable import PhotoCullAppChecks
 
 @MainActor
 private final class Checks {

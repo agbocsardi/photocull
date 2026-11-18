@@ -9,18 +9,19 @@ launch the ordinary dist app for this workflow, or replace its saved config.**
 - `scripts/prepare-manual-finalize-fixture.sh`: generate only six JPEGs, proposed
   TOML, manifest, pure image-export probe, checker and this checklist in a fresh
   canonical `/private/tmp/photocull-manual-fixture-*` root. No app bundle/release build.
-- `scripts/check-fixture-startup.sh`: full isolated release compile, focused native
-  startup/ownership/I/O guard checks with effective negative controls, existing
-  focused operation/navigation regressions, and an ad-hoc signed **separate**
-  `PhotoCullFixture.app`. Build/check products live in fresh canonical
-  `/private/tmp/photocull-manual-launch-*` roots. It generates another fresh launch
-  fixture as the eventual writable GUI target, never the read-only shared inputs.
-  Candidate/fixture paths, unique bundle ID, hash, signature log and proposed
-  launch command are recorded in its output. The script never executes PhotoCull.
+- `scripts/check-fixture-startup.sh` (also via `scripts/check-all.sh --with-fixture-startup`):
+  native startup/ownership/I/O guard checks with effective negative controls,
+  operation/navigation regressions, and an ad-hoc signed **separate**
+  `PhotoCullFixture.app`. Operation/navigation results go to the console. The
+  candidate uses the SwiftPM debug build; the startup and negative-control logs
+  and signed bundle live in a fresh canonical
+  `/private/tmp/photocull-manual-launch-*` root. A separate fresh data fixture is
+  the eventual writable GUI target, never the read-only shared inputs. The output
+  records the candidate and fixture paths, unique bundle ID, hash, signature log
+  and proposed launch command. The script never executes PhotoCull.
 
-No installs, dependencies, framework additions, shared `.build`, dist replacement,
-ordinary diagnostics, cards, native Trash or GUI actions. Native macOS APIs only.
-Every compiler/SwiftPM/Clang cache/config/security/temp output is isolated. Existing
+No installs, dependencies, framework additions, dist replacement, ordinary
+diagnostics, cards, native Trash or GUI actions. Native macOS APIs only. Existing
 shared preparation roots are hashed read-only before/after and never modified.
 Do not use `scripts/build-app.sh` here (it writes shared build/dist outputs).
 
@@ -160,7 +161,7 @@ fail. Root-local output validation never proves Trash presence or recoverability
   row can remain. Success toast: 4 archived / 2 trashed and retained folder path.
 - [ ] User manually inspects ONLY the two generated reject items in macOS Trash
   if separately authorized. Never empty Trash, auto-remove/restore, or inspect
-  unrelated items. This step was not performed by the fixture agent/checks.
+  unrelated items. The automated checks do not perform this step.
 - [ ] Failure/recovery record/claims: STOP and preserve ROOT/partial outputs;
   report exact locations, no blind retry, automatic rollback or recursive cleanup.
 

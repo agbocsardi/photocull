@@ -37,6 +37,8 @@ func suiteEndToEnd() throws {
 
     // ---- 2. Ingest ---------------------------------------------------------
     let root = try makeTempDir("e2e")
+    defer { try? FileManager.default.removeItem(at: root) }
+    let hooks = syntheticFinalizeHooks(root: root)
     let inbox = root.appendingPathComponent("inbox")
     let archive = root.appendingPathComponent("archive")
     let dump = root.appendingPathComponent("dump")
@@ -99,7 +101,7 @@ func suiteEndToEnd() throws {
 
     // ---- 5. Finalize -------------------------------------------------------
     let fin = try Finalize.run(cfg: cfg, date: captureDate, dump: true,
-                               cropMode: .applyCrop, dumpOverride: dump)
+                               cropMode: .applyCrop, dumpOverride: dump, hooks: hooks)
     checkEqual(fin.sessions, 1, "one session finalized")
     checkEqual(fin.archived, 2, "keeper JPG + its RAW archived")
     checkEqual(fin.trashed, 1, "rejected JPG trashed (DSCF0002 has no RAW)")
@@ -146,7 +148,7 @@ func suiteEndToEnd() throws {
     }
 
     let multi = try Finalize.runMulti(cfg: cfg2, dates: ["2025-03-10", "2025-03-07"],
-                                      dump: true, cropMode: .original)
+                                      dump: true, cropMode: .original, hooks: hooks)
     checkEqual(multi.sessions, 2, "multi finalize processed two sessions")
     checkEqual(URL(fileURLWithPath: multi.dumpFolder).lastPathComponent,
                "2025-03-07 to 2025-03-10", "date-range dump folder name")

@@ -21,6 +21,8 @@ func suiteFinalizeParallel() throws {
         return
     }
     let tmp = try makeTempDir("finalize-par")
+    defer { try? fm.removeItem(at: tmp) }
+    let hooks = syntheticFinalizeHooks(root: tmp)
     let cfg = PCConfig(
         paths: PathsConfig(inbox: tmp.appendingPathComponent("inbox").path,
                            archive: tmp.appendingPathComponent("archive").path,
@@ -48,7 +50,7 @@ func suiteFinalizeParallel() throws {
     let dump = tmp.appendingPathComponent("dump").appendingPathComponent(date)
     let arch = tmp.appendingPathComponent("archive").appendingPathComponent(date)
     let res = try Finalize.run(cfg: cfg, date: date, dump: true,
-                               cropMode: .applyCrop, dumpOverride: nil)
+                               cropMode: .applyCrop, dumpOverride: nil, hooks: hooks)
     checkEqual(res.dumped, 5, "parallel run dumps all five keepers")
     checkEqual(res.cropped, 4, "parallel run counts four edited exports")
     checkEqual(res.archived, 5, "parallel run archives all five keepers")
@@ -120,7 +122,7 @@ func suiteFinalizeParallel() throws {
     var threw = false
     do {
         _ = try Finalize.run(cfg: cfg, date: date2, dump: true,
-                             cropMode: .applyCrop, dumpOverride: nil)
+                             cropMode: .applyCrop, dumpOverride: nil, hooks: hooks)
     } catch {
         threw = true
     }
@@ -153,7 +155,7 @@ func suiteFinalizeParallel() throws {
     var refused = false
     do {
         _ = try Finalize.run(cfg: cfg, date: date2, dump: true,
-                             cropMode: .applyCrop, dumpOverride: nil)
+                             cropMode: .applyCrop, dumpOverride: nil, hooks: hooks)
     } catch { refused = true }
     check(refused, "re-run refused until the retained recovery record is inspected")
     // The failed run stopped before claiming S0002/S0003, so the retained claims
@@ -168,7 +170,7 @@ func suiteFinalizeParallel() throws {
     try fm.removeItem(at: folder2.appendingPathComponent(".photocull-recovery.json"))
     for name in claimsFolders { try fm.removeItem(at: folder2.appendingPathComponent(name)) }
     let res2 = try Finalize.run(cfg: cfg, date: date2, dump: true,
-                                cropMode: .applyCrop, dumpOverride: nil)
+                                cropMode: .applyCrop, dumpOverride: nil, hooks: hooks)
     checkEqual(res2.dumped, 2, "re-run dumps the two remaining keepers")
     checkEqual(res2.archived, 2, "re-run archives the two remaining keepers")
     checkEqual(res2.trashed, 1, "re-run trashes the reject that stayed in the inbox")

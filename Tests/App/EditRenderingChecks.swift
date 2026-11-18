@@ -2,6 +2,7 @@ import Foundation
 import CoreGraphics
 import CoreFoundation
 import PhotoCullCore
+@testable import PhotoCullAppChecks
 
 private var checks = 0
 private func check(_ condition: @autoclosure () -> Bool, _ message: String) {
