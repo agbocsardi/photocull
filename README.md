@@ -1,12 +1,11 @@
-# PhotoCull (Swift)
+# PhotoCull
 
 A native macOS app for the full RAW+JPG photo culling workflow: ingest from an SD card,
 cull with the keyboard, crop non-destructively, and finalize — archiving keepers, trashing
 rejects with their paired RAWs, and dropping keep-JPGs into a folder ready for Apple Photos.
 
-This is a Swift/SwiftUI port of the Go web app in `../photocull`. It shares the same config
-file, the same directory layout, and the same `.photocull.json` sidecar format, so both apps
-can work on the same library.
+It began as a port of an earlier Go web app and keeps its config file, directory layout and
+`.photocull.json` sidecar format.
 
 ## Status
 
