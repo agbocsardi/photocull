@@ -9,11 +9,14 @@ refuse() { echo "$*" >&2; exit 2; }
 # Hold the lock through execution as well as compilation: Finalize also
 # launches a probe of its own cached runner.
 if [[ ${1:-} != --locked ]]; then
-  [[ ! -L "$ROOT/.build" && ! -L "$BUILD" ]] || refuse 'Check build directory must not be a symlink'
+  [[ ! -L "$ROOT/.build" && ! -L "$BUILD" && ! -L "$BUILD/lock" ]] || refuse 'Check cache must not contain symlinks'
   mkdir -p -- "$BUILD"
   exec /usr/bin/lockf -k "$BUILD/lock" /bin/bash "$0" --locked "$@"
 fi
 shift
+# Check under the lock before using any cached paths. Include dangling links.
+link=$(/usr/bin/find -P "$BUILD" -type l -print -quit)
+[[ -z "$link" ]] || refuse "Check cache must not contain symlinks: $link"
 
 mode=${1:?check group required}
 usage() {
@@ -34,7 +37,9 @@ case "$mode" in
     esac
     group=("${regular[@]}") ;;
   fixture-startup) group=(finalize-operation navigation); fixture=true ;;
-  finalize-safety) group=(core finalize-core finalize-descriptors finalize-operation navigation) ;;
+  finalize-safety)
+    [[ -n ${OUT:-} ]] || refuse 'OUT must be an absolute dedicated output directory'
+    group=(core finalize-core finalize-descriptors finalize-operation navigation) ;;
   finalize-planning) group=(core finalize-core) ;;
   ingest-collectors) group=(core ingest-collectors) ;;
   edit-rendering|image-loading|navigation) group=("$mode") ;;
@@ -78,11 +83,11 @@ run_regular() (
     PC_FINALIZE_TEST_OUT="$RUN" PC_NAVIGATION_OUT="$RUN"
   unset PC_FIXTURES
   case "$mode" in
-    all) "$BUILD/PhotoCullTests" ;;
-    finalize-safety|finalize-planning) "$BUILD/PhotoCullTests" --finalize-safety-only ;;
+    all) "$PM_BIN/PhotoCullTests" ;;
+    finalize-safety|finalize-planning) "$PM_BIN/PhotoCullTests" --finalize-safety-only ;;
     ingest-collectors)
-      "$BUILD/PhotoCullTests" --suite IngestConcurrent
-      "$BUILD/PhotoCullTests" --finalize-safety-only ;;
+      "$PM_BIN/PhotoCullTests" --suite IngestConcurrent
+      "$PM_BIN/PhotoCullTests" --finalize-safety-only ;;
   esac
   local check
   for check in "${group[@]}"; do
@@ -114,7 +119,7 @@ check_invalid_selections() {
 
 reject_selection() {
   local log="$RUN/invalid-selection.log"
-  if "$BUILD/PhotoCullTests" "$@" >"$log" 2>&1; then
+  if "$PM_BIN/PhotoCullTests" "$@" >"$log" 2>&1; then
     echo "Expected invalid selection to fail: $*" >&2; return 1
   fi
   if grep -q 'Selected .*suite' "$log"; then
@@ -139,8 +144,16 @@ else
 fi
 printf 'Check output: %s\n' "$RUN"
 
-export TMPDIR="$RUN/"
 source "$ROOT/scripts/lib/check-build.sh"
+# Build the actual package (including the app entry point) without launching it.
+# Standalone checks that need the core runner can build just that product.
+# Do not vary TMPDIR between SwiftPM invocations: Swift Build keys on it.
+if [[ "$mode" == all ]] || $fixture; then
+  build_package
+elif [[ ${group[0]} == core ]]; then
+  build_package --product PhotoCullTests
+fi
+export TMPDIR="$RUN/"
 init_check_build
 build_regular_checks "${group[@]}"
 if $fixture; then build_fixture_checks; fi

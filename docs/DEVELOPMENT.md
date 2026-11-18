@@ -24,15 +24,18 @@ custom harness (`Sources/PhotoCullTests/Harness.swift`) rather than `swift test`
 ./scripts/check-all.sh --with-fixture-startup  # add startup checks and negative controls
 ```
 
-Both commands reuse an incremental debug build at `.build/checks/`. Run with
-`--with-fixture-startup` for startup, config, `LibraryMode`, or fixture changes.
+Both commands build the package in debug mode with SwiftPM in `.build/` and
+reuse focused check binaries in `.build/checks/`. Core tests send rejects to
+synthetic Trash inside the temporary fixtures, never to macOS Trash.
+Run with `--with-fixture-startup` for startup, config, `LibraryMode`, or fixture changes.
 This also prepares a disposable app bundle for review; it never launches PhotoCull.
 The release workflow still runs only `swift run PhotoCullTests`.
 
 The individual `scripts/check-*.sh` commands remain available. They use fresh
 synthetic data in `/tmp`, outside the build cache. To retain artifacts from a
 regular check, set `OUT` to a dedicated absolute directory under `/tmp`; the
-script creates a fresh child there. The fixture-startup script retains its logs
+script creates a fresh child there. The standalone `check-finalize-safety.sh`
+requires `OUT`. The fixture-startup script retains its logs
 and candidate in a separate `/private/tmp/photocull-manual-launch-*` directory.
 
 ## Packaging and releases

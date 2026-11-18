@@ -62,7 +62,7 @@ run_fixture_startup() (
   ID="local.photocull.fixture.$(uuidgen | tr '[:upper:]' '[:lower:]')"
   APP="$OUT/bundle/PhotoCullFixture.app"
   mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
-  cp "$BUILD/fixture/PhotoCull" "$APP/Contents/MacOS/PhotoCull"
+  cp "$PM_BIN/PhotoCull" "$APP/Contents/MacOS/PhotoCull"
   cp "$ROOT/resources/Info.plist" "$APP/Contents/Info.plist"
   /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $ID" "$APP/Contents/Info.plist"
   /usr/libexec/PlistBuddy -c 'Set :CFBundleName PhotoCull Fixture' "$APP/Contents/Info.plist"

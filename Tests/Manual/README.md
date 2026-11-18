@@ -12,8 +12,9 @@ launch the ordinary dist app for this workflow, or replace its saved config.**
 - `scripts/check-fixture-startup.sh` (also via `scripts/check-all.sh --with-fixture-startup`):
   native startup/ownership/I/O guard checks with effective negative controls,
   operation/navigation regressions, and an ad-hoc signed **separate**
-  `PhotoCullFixture.app`. Debug binaries and compiler caches are reused from
-  `.build/checks/`; the candidate and logs live in a fresh canonical
+  `PhotoCullFixture.app`. Operation/navigation results go to the console. The
+  candidate uses the SwiftPM debug build; the startup and negative-control logs
+  and signed bundle live in a fresh canonical
   `/private/tmp/photocull-manual-launch-*` root. A separate fresh data fixture is
   the eventual writable GUI target, never the read-only shared inputs. The output
   records the candidate and fixture paths, unique bundle ID, hash, signature log
@@ -160,7 +161,7 @@ fail. Root-local output validation never proves Trash presence or recoverability
   row can remain. Success toast: 4 archived / 2 trashed and retained folder path.
 - [ ] User manually inspects ONLY the two generated reject items in macOS Trash
   if separately authorized. Never empty Trash, auto-remove/restore, or inspect
-  unrelated items. This step was not performed by the fixture agent/checks.
+  unrelated items. The automated checks do not perform this step.
 - [ ] Failure/recovery record/claims: STOP and preserve ROOT/partial outputs;
   report exact locations, no blind retry, automatic rollback or recursive cleanup.
 

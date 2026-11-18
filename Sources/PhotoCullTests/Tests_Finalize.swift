@@ -5,6 +5,8 @@ import ImageIO
 func suiteFinalize() throws {
     let fm = FileManager.default
     let tmp = try makeTempDir("finalize")
+    defer { try? fm.removeItem(at: tmp) }
+    let hooks = syntheticFinalizeHooks(root: tmp)
     let cfg = PCConfig(
         paths: PathsConfig(inbox: tmp.appendingPathComponent("inbox").path,
                            archive: tmp.appendingPathComponent("archive").path,
@@ -48,7 +50,7 @@ func suiteFinalize() throws {
     // ── run: dump original via override ──────────────────────────────────
     let dumpOverride = tmp.appendingPathComponent("mydump")
     let res = try Finalize.run(cfg: cfg, date: date, dump: true,
-                               cropMode: .original, dumpOverride: dumpOverride)
+                               cropMode: .original, dumpOverride: dumpOverride, hooks: hooks)
     checkEqual(res.sessions, 1, "run sessions count")
     checkEqual(res.archived, 5, "run archives 5 files (2+2 pair files + orphan)")
     checkEqual(res.trashed, 1, "run trashes 1 file (reject JPG only)")
@@ -86,7 +88,7 @@ func suiteFinalize() throws {
 
     let arch2 = tmp.appendingPathComponent("archive").appendingPathComponent(date2)
     let res2 = try Finalize.run(cfg: cfg, date: date2, dump: false,
-                                cropMode: .original, dumpOverride: nil)
+                                cropMode: .original, dumpOverride: nil, hooks: hooks)
     checkEqual(res2.archived, 2, "second session archives jpg+raw")
     checkEqual(res2.dumped, 0, "nothing dumped when dump=false")
     check(!exists(tmp.appendingPathComponent("dump")), "dump root not created when dump=false")
@@ -105,7 +107,7 @@ func suiteFinalize() throws {
     try touch(folderX.appendingPathComponent("X0001.JPG"), bytes: 50)
     try writeSidecar(folderX, #"{"version":1,"decisions":{"X0001":"keep"},"last_index":1}"#)
     try touch(folderX.appendingPathComponent("notes.txt"), bytes: 5)
-    let resX = try Finalize.run(cfg: cfg, date: dateX, dump: false, cropMode: .original, dumpOverride: nil)
+    let resX = try Finalize.run(cfg: cfg, date: dateX, dump: false, cropMode: .original, dumpOverride: nil, hooks: hooks)
     checkEqual(resX.archived, 1, "extra-file session archives its only pair")
     check(exists(folderX), "inbox folder retained when an extra file is present")
     check(exists(folderX.appendingPathComponent(".photocull.json")),
@@ -119,7 +121,7 @@ func suiteFinalize() throws {
         let f = tmp.appendingPathComponent("inbox").appendingPathComponent(d)
         try touch(f.appendingPathComponent(n), bytes: 111)
     }
-    let resM = try Finalize.runMulti(cfg: cfg, dates: [dB, dA], dump: true, cropMode: .original)
+    let resM = try Finalize.runMulti(cfg: cfg, dates: [dB, dA], dump: true, cropMode: .original, hooks: hooks)
     checkEqual(resM.sessions, 2, "runMulti session count")
     checkEqual(resM.archived, 2, "runMulti archived count")
     checkEqual(resM.dumped, 2, "runMulti dumped count")
@@ -143,7 +145,7 @@ func suiteFinalize() throws {
                          #"{"version":1,"decisions":{"H0001":"keep"},"crops":{"H0001":{"x":0,"y":0,"w":0.5,"h":0.5}},"last_index":1}"#)
         let dump3 = tmp.appendingPathComponent("cropdump")
         let res3 = try Finalize.run(cfg: cfg, date: date3, dump: true,
-                                    cropMode: .applyCrop, dumpOverride: dump3)
+                                    cropMode: .applyCrop, dumpOverride: dump3, hooks: hooks)
         checkEqual(res3.dumped, 1, "applyCrop dumps one JPG")
         checkEqual(res3.cropped, 1, "applyCrop counts the re-encoded crop")
         checkEqual(res3.archived, 1, "applyCrop still archives the original")

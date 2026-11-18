@@ -40,7 +40,7 @@ func suiteFinalizeSafety() throws {
     }
     func finalize(_ folder: URL) throws -> FinalizeResult {
         try Finalize.run(cfg: cfg, date: folder.lastPathComponent, dump: false,
-                         cropMode: .original, dumpOverride: nil)
+                         cropMode: .original, dumpOverride: nil, hooks: syntheticFinalizeHooks(root: root))
     }
     func retained(_ folder: URL) {
         check(fm.fileExists(atPath: folder.path), "residual folder retained")
