@@ -63,7 +63,7 @@ func suiteFinalizeParallel() throws {
     }
     check(!fm.fileExists(atPath: arch.appendingPathComponent("R0001.JPG").path),
           "reject not archived")
-    check(!fm.fileExists(atPath: folder.path), "inbox date folder removed after parallel run")
+    check(fm.fileExists(atPath: folder.path), "inbox date folder retained after parallel run")
 
     func pixelSize(_ url: URL) -> (w: Int, h: Int)? {
         guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
@@ -145,9 +145,28 @@ func suiteFinalizeParallel() throws {
     check(tmpFiles(in: dump2).isEmpty && tmpFiles(in: folder2).isEmpty,
           "no .tmp files remain after a failed run")
 
-    // ── Re-run after fixing the bad file: clean names, no _2 duplicates ──
+    // ── Re-run after fixing the bad file: the retained recovery record ──
+    // deliberately blocks a silent retry; after the documented manual ──
+    // recovery the re-run completes with clean names, no _2 duplicates. ──
     try fm.removeItem(at: folder2.appendingPathComponent("S0002.JPG"))
     try fm.copyItem(at: fx, to: folder2.appendingPathComponent("S0002.JPG"))
+    var refused = false
+    do {
+        _ = try Finalize.run(cfg: cfg, date: date2, dump: true,
+                             cropMode: .applyCrop, dumpOverride: nil)
+    } catch { refused = true }
+    check(refused, "re-run refused until the retained recovery record is inspected")
+    // The failed run stopped before claiming S0002/S0003, so the retained claims
+    // folder holds only the progress journal — manual recovery is safe.
+    let claimsFolders = try fm.contentsOfDirectory(atPath: folder2.path)
+        .filter { $0.hasPrefix(".photocull-claims-") }
+    checkEqual(claimsFolders.count, 1, "failed run retains one claims folder")
+    for name in claimsFolders {
+        checkEqual(try Set(fm.contentsOfDirectory(atPath: folder2.appendingPathComponent(name).path)),
+                   Set([".progress.jsonl"]), "claims folder holds only the progress journal")
+    }
+    try fm.removeItem(at: folder2.appendingPathComponent(".photocull-recovery.json"))
+    for name in claimsFolders { try fm.removeItem(at: folder2.appendingPathComponent(name)) }
     let res2 = try Finalize.run(cfg: cfg, date: date2, dump: true,
                                 cropMode: .applyCrop, dumpOverride: nil)
     checkEqual(res2.dumped, 2, "re-run dumps the two remaining keepers")
@@ -156,7 +175,7 @@ func suiteFinalizeParallel() throws {
     checkEqual(try Set(fm.contentsOfDirectory(atPath: dump2.path)),
                Set(["S0001.JPG", "S0002.JPG", "S0003.JPG"]),
                "re-run dump holds exactly the clean names, no _2 suffixes")
-    check(!fm.fileExists(atPath: folder2.path), "re-run removes the inbox folder")
+    check(fm.fileExists(atPath: folder2.path), "re-run leaves the sidecar-only inbox folder retained")
     check(tmpFiles(in: dump2).isEmpty, "no .tmp files after the successful re-run")
 }
 

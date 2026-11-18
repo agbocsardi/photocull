@@ -54,7 +54,7 @@ func suiteFinalize() throws {
     checkEqual(res.trashed, 1, "run trashes 1 file (reject JPG only)")
     checkEqual(res.dumped, 2, "run dumps keep+undecided JPGs (2)")
     checkEqual(res.cropped, 0, "no crops in .original mode")
-    checkEqual(res.dumpFolder, dumpOverride.path, "result reports the dump folder")
+    checkEqual(res.dumpFolder, canonicalPath(dumpOverride), "result reports the dump folder")
 
     let arch = tmp.appendingPathComponent("archive").appendingPathComponent(date)
     for n in ["A0001.JPG", "A0001.RAF", "C0001.JPG", "C0001.RAF", "D0002.RAF"] {
@@ -68,9 +68,10 @@ func suiteFinalize() throws {
           "rejected JPG is not dumped")
     checkEqual((try Data(contentsOf: dumpOverride.appendingPathComponent("A0001.JPG"))).count, 100,
                ".original dump is a byte copy")
-    // Inbox date folder (and its sidecar) removed; rejects left the inbox (trashed).
-    check(!exists(folder), "inbox date folder removed")
-    check(!exists(folder.appendingPathComponent(".photocull.json")), "sidecar removed with folder")
+    // The safety layer deliberately retains the sidecar, so the emptied date
+    // folder remains; rejects left the inbox (trashed).
+    check(exists(folder), "inbox date folder retained with its sidecar")
+    check(exists(folder.appendingPathComponent(".photocull.json")), "sidecar retained with the folder")
 
     // ── run without dump: no dump folder created; archive collision → _2 ─
     let date2 = "2024-06-01"
@@ -90,10 +91,11 @@ func suiteFinalize() throws {
     check(!exists(tmp.appendingPathComponent("dump")), "dump root not created when dump=false")
     check(exists(arch2.appendingPathComponent("E0001_2.JPG")),
           "archive name collision gets _2 suffix")
-    check(exists(arch2.appendingPathComponent("E0001.RAF")), "RAW archived next to collided JPG")
+    check(exists(arch2.appendingPathComponent("E0001_2.RAF")),
+          "RAW archived with the pair's common collision suffix")
     checkEqual((try? Data(contentsOf: arch2.appendingPathComponent("E0001_2.JPG")))?.count, 700,
                "collided archive copy holds the new file's bytes")
-    check(!exists(folder2), "second inbox date folder removed")
+    check(exists(folder2), "second inbox date folder retained with its sidecar")
 
     // ── runMulti: two dates → one dump folder "first to last" ────────────
     let dA = "2025-03-07"
@@ -144,8 +146,8 @@ func suiteFinalize() throws {
         } else {
             check(false, "cropped output is a readable image")
         }
-        check(!exists(tmp.appendingPathComponent("inbox").appendingPathComponent(date3)),
-              "crop session inbox folder removed")
+        check(exists(tmp.appendingPathComponent("inbox").appendingPathComponent(date3)),
+              "crop session inbox folder retained with its sidecar")
     } else {
         print("  (skip: fixture JPEG not present for applyCrop test)")
     }

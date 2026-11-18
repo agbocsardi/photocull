@@ -104,8 +104,8 @@ func suiteEndToEnd() throws {
     checkEqual(fin.archived, 2, "keeper JPG + its RAW archived")
     checkEqual(fin.trashed, 1, "rejected JPG trashed (DSCF0002 has no RAW)")
     checkEqual(fin.cropped, 1, "one cropped JPEG written")
-    check(!FileManager.default.fileExists(atPath: inboxFolder.path),
-          "inbox date folder removed after finalize")
+    check(FileManager.default.fileExists(atPath: inboxFolder.path),
+          "inbox date folder retained with its sidecar")
 
     let archivedFiles = try FileManager.default.contentsOfDirectory(atPath:
         archive.appendingPathComponent(captureDate).path).sorted()
@@ -114,7 +114,10 @@ func suiteEndToEnd() throws {
 
     let dumped = try FileManager.default.contentsOfDirectory(atPath: dump.path).sorted()
     checkEqual(dumped, ["DSCF0001.JPG"], "dump holds only the keeper JPG")
-    checkEqual(Library.loadSessions(cfg: cfg).count, 0, "inbox is empty after finalize")
+    // The retained sidecar-only folder is the sole (empty) session row.
+    let retainedRows = Library.loadSessions(cfg: cfg)
+    checkEqual(retainedRows.count, 1, "finalize leaves one retained sidecar-only session row")
+    checkEqual(retainedRows.first?.total, 0, "retained session row has no pairs left")
 
     // The dumped copy must actually be cropped.
     let dumpJPG = dump.appendingPathComponent("DSCF0001.JPG")
@@ -152,5 +155,5 @@ func suiteEndToEnd() throws {
     check(FileManager.default.fileExists(atPath:
         dump2.appendingPathComponent("2025-03-07 to 2025-03-10/IMG_1.JPG").path),
         "range dump folder holds the keeper JPG")
-    checkEqual(Library.loadSessions(cfg: cfg2).count, 0, "both inboxes emptied")
+    checkEqual(Library.loadSessions(cfg: cfg2).count, 2, "both inboxes hold only retained sidecar-only folders")
 }
