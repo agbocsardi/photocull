@@ -6,7 +6,12 @@ import Darwin
 
 struct FinalizeSafetyError: LocalizedError {
     let message: String
-    init(_ message: String) { self.message = message }
+    /// True when the failure is the cooperative session lock being held
+    /// elsewhere; `SessionStore` maps that to `SessionLockedError` (HTTP 409).
+    var lockContention = false
+    init(_ message: String, lockContention: Bool = false) {
+        self.message = message; self.lockContention = lockContention
+    }
     var errorDescription: String? { message }
 }
 
@@ -48,7 +53,7 @@ final class FinalizeDirectory {
             guard directoryFlock(fd, LOCK_EX | LOCK_NB) == 0 else {
                 let code = errno
                 // All properties are initialized: deinit alone owns fd on this throw.
-                if code == EWOULDBLOCK { throw FinalizeSafetyError("Another Finalize owns \(url.path)") }
+                if code == EWOULDBLOCK { throw FinalizeSafetyError("Another Finalize owns \(url.path)", lockContention: true) }
                 throw finalizePOSIX("Cannot lock session; refusing Finalize \(url.path)", code: code)
             }
             locked = true

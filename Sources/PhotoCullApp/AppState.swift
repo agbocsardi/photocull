@@ -203,6 +203,9 @@ final class AppState: ObservableObject {
     private var toastTask: Task<Void, Never>?
     /// Debounced sidecar write for navigation (trailing edge, ~500 ms).
     private var persistTask: Task<Void, Never>?
+    /// ~1 s poll of the active session's sidecar for changes made by other
+    /// writers (the embedded API). Read-only: it never writes the sidecar.
+    private var reloadTask: Task<Void, Never>?
     private static let appearanceKey = "PhotoCull.appearance"
     /// One-time flag for the Getting Started guide. Read through
     /// `string(forKey:)` only: the fixture startup checks compile AppState
@@ -326,6 +329,8 @@ final class AppState: ObservableObject {
     private func clearActiveSession() {
         persistTask?.cancel()
         persistTask = nil
+        reloadTask?.cancel()
+        reloadTask = nil
         activeDate = nil
         pairs = []
         session = nil
@@ -387,6 +392,7 @@ final class AppState: ObservableObject {
             sessionOpenEpoch += 1
             cropMode = false
             canvas.resetZoom()
+            watchSidecar()
             loadCurrent()
         } catch {
             fail("Could not open \(date): \(error.localizedDescription)")
@@ -446,15 +452,26 @@ final class AppState: ObservableObject {
         persistTask = nil
         guard let session, let date = activeDate else { return true }
         do {
-            let folder = Library.inboxFolder(cfg: cfg, date: date)
-            // Permissive browsing must not turn corrupt/future metadata into a fresh saved sidecar.
-            _ = try Session.load(folder: folder, strict: true)
-            try session.save(folder: folder)
+            try writeMerge(session, date)
             return true
         } catch {
             fail("Could not save session: \(error.localizedDescription)")
             return false
         }
+    }
+
+    // MARK: - Sidecar writes (merge under the session lock)
+
+    /// Read → merge → write through `SessionStore`, so a concurrent writer's
+    /// newer fields survive instead of being overwritten. The merged result is
+    /// adopted into `target` in place, keeping the object identity that undo
+    /// edits capture.
+    private func writeMerge(_ target: Session, _ date: String) throws {
+        let folder = Library.inboxFolder(cfg: cfg, date: date)
+        let merged = try SessionStore.merge(target, folder: folder)
+        let changed = !target.hasSameContent(as: merged)
+        target.adopt(merged)
+        if changed, target === session { revision += 1 }
     }
 
     // MARK: - Undo / redo
@@ -491,6 +508,7 @@ final class AppState: ObservableObject {
         redoStack.append(edit)
         if edit.target === session { revision += 1 }
         persist(edit.target, edit.date)
+        if edit.target !== session, edit.date == activeDate { reloadSidecar() }
         refreshRows()
         toastMessage("Undid \(edit.what)")
     }
@@ -502,18 +520,69 @@ final class AppState: ObservableObject {
         undoStack.append(edit)
         if edit.target === session { revision += 1 }
         persist(edit.target, edit.date)
+        if edit.target !== session, edit.date == activeDate { reloadSidecar() }
         refreshRows()
         toastMessage("Redid \(edit.what)")
     }
 
     private func persist(_ target: Session, _ date: String) {
         guard bulkOperation == nil else { return }
-        do {
-            let folder = Library.inboxFolder(cfg: cfg, date: date)
-            _ = try Session.load(folder: folder, strict: true)
-            try target.save(folder: folder)
-        }
+        // The store loads strictly, so permissive browsing cannot turn
+        // corrupt/future metadata into a fresh saved sidecar.
+        do { try writeMerge(target, date) }
         catch { fail("Could not save session: \(error.localizedDescription)") }
+    }
+
+    // MARK: - External sidecar changes
+
+    /// Cheap file identity for a sidecar: any change here means another writer
+    /// (the embedded API) touched it.
+    private struct SidecarSignature: Equatable {
+        var modified: Date
+        var size: Int
+    }
+
+    private static func sidecarSignature(_ url: URL) -> SidecarSignature? {
+        guard let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey]),
+              let modified = values.contentModificationDate else { return nil }
+        return SidecarSignature(modified: modified, size: values.fileSize ?? 0)
+    }
+
+    /// Poll the active session's sidecar once a second while a session is open.
+    /// A mtime+size poll is the simplest thing that still works when the folder
+    /// is replaced (atomic writes rename a new file over the old one).
+    private func watchSidecar() {
+        reloadTask?.cancel()
+        guard let date = activeDate else { reloadTask = nil; return }
+        let url = Library.inboxFolder(cfg: cfg, date: date).appendingPathComponent(Session.fileName)
+        reloadTask = Task { [weak self] in
+            var seen = Self.sidecarSignature(url)
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                guard !Task.isCancelled, let self else { return }
+                let now = Self.sidecarSignature(url)
+                guard now != seen else { continue }
+                seen = now
+                self.reloadSidecar()
+            }
+        }
+    }
+
+    /// Merge on-disk changes into the active session without writing anything.
+    /// Local edits that are not saved yet keep their own newer stamps; an
+    /// unreadable sidecar never replaces what is in memory.
+    private func reloadSidecar() {
+        guard bulkOperation == nil, let session, let date = activeDate else { return }
+        let folder = Library.inboxFolder(cfg: cfg, date: date)
+        guard let disk = try? Session.load(folder: folder, strict: true) else { return }
+        let merged = disk.merged(with: session)
+        guard !session.hasSameContent(as: merged) else { return }
+        session.adopt(merged)
+        revision += 1
+        refreshRows()
+        guard !cropMode, let pair = currentPair else { return }
+        canvas.cropRect = session.crop(for: pair.stem) ?? .full
+        canvas.cropTilt = session.tilt(for: pair.stem)
     }
 
     // MARK: - Navigation
