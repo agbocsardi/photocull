@@ -206,6 +206,16 @@ final class AppState: ObservableObject {
     /// ~1 s poll of the active session's sidecar for changes made by other
     /// writers (the embedded API). Read-only: it never writes the sidecar.
     private var reloadTask: Task<Void, Never>?
+    /// Debounced sidebar refresh after the embedded API changed a session the
+    /// Mac does not have open (see `RemoteSessionNotice`).
+    private var remoteRowTask: Task<Void, Never>?
+    private var remoteRowDates: Set<String> = []
+    private var remoteNotice: NSObjectProtocol?
+    /// Phone previews warmed in the background after ingest, per date.
+    private var previewWarmTasks: [String: Task<Void, Never>] = [:]
+    /// Set by the app entry point: the embedded phone API has to follow a
+    /// config applied in Settings. Headless checks leave it nil.
+    var configDidApply: ((PCConfig) -> Void)?
     private static let appearanceKey = "PhotoCull.appearance"
     /// One-time flag for the Getting Started guide. Read through
     /// `string(forKey:)` only: the fixture startup checks compile AppState
@@ -243,6 +253,17 @@ final class AppState: ObservableObject {
         // `beginIngest` detects (and defaults `ingestSource`) when needed.
         reloadLibrary()
         if openInitialSession, let first = sessions.first { open(date: first.date) }
+        observeRemoteChanges()
+    }
+
+    /// The embedded API posts one notice per applied change batch; refresh the
+    /// sidebar row it touched (debounced, because a phone flushes bursts).
+    private func observeRemoteChanges() {
+        remoteNotice = NotificationCenter.default.addObserver(
+            forName: RemoteSessionNotice.applied, object: nil, queue: .main) { [weak self] note in
+            guard let date = note.userInfo?[RemoteSessionNotice.dateKey] as? String else { return }
+            Task { @MainActor in self?.scheduleRemoteRow(date) }
+        }
     }
 
     /// One-time Getting Started guide on the very first launch. Called from
@@ -371,6 +392,7 @@ final class AppState: ObservableObject {
         cropExportMode = applied.finalize.cropExportMode
         reloadLibrary()
         if let first = sessions.first { open(date: first.date) }
+        configDidApply?(applied)
         toastMessage("Settings applied")
         return true
     }
@@ -468,7 +490,8 @@ final class AppState: ObservableObject {
     /// edits capture.
     private func writeMerge(_ target: Session, _ date: String) throws {
         let folder = Library.inboxFolder(cfg: cfg, date: date)
-        let merged = try SessionStore.merge(target, folder: folder)
+        // Main thread: wait only long enough for a phone write's ~1 ms merge.
+        let merged = try SessionStore.merge(target, folder: folder, retryFor: 0.03)
         let changed = !target.hasSameContent(as: merged)
         target.adopt(merged)
         if changed, target === session { revision += 1 }
@@ -638,6 +661,35 @@ final class AppState: ObservableObject {
         run("clearing \(stem)", change: { $0.set(stem, .undecided) },
             revert: { $0.set(stem, current) })
         refreshRows()
+    }
+
+    // MARK: - Remote writers
+
+    /// A phone (embedded API) applied changes to `date`. The open session is
+    /// merged by the ~1 s sidecar poll; any other session needs its sidebar
+    /// row re-derived. Debounced: one tap flushes a burst of changes.
+    private func scheduleRemoteRow(_ date: String) {
+        remoteRowDates.insert(date)
+        remoteRowTask?.cancel()
+        remoteRowTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard let self, !Task.isCancelled else { return }
+            let dates = self.remoteRowDates
+            self.remoteRowDates.removeAll()
+            for date in dates { self.refreshRow(date) }
+        }
+    }
+
+    /// Re-derive one sidebar row. The open session is already in memory (and
+    /// merged by the poll), so only closed sessions are read back from disk.
+    private func refreshRow(_ date: String) {
+        guard bulkOperation == nil, sessions.contains(where: { $0.date == date }) else { return }
+        if date == activeDate, session != nil {
+            refreshRows()
+            return
+        }
+        guard let row = Library.row(cfg: cfg, date: date) else { return }
+        if let i = sessions.firstIndex(where: { $0.date == date }) { sessions[i] = row }
     }
 
     private func refreshRows() {
@@ -945,6 +997,7 @@ final class AppState: ObservableObject {
                 }
                 guard bulkOperation == .finalize(token) else { return }
                 finishFileOperation(affected: Set(dates))
+                discardPreviews(Set(dates), cfg: cfg)
                 finalizeStats = []
                 let retained = result.retainedFolders.isEmpty ? "" : " — retained: \(result.retainedFolders.joined(separator: ", "))"
                 toastMessage("Finalized \(result.sessions) session(s) — \(result.archived) archived, \(result.trashed) trashed\(retained)")
@@ -973,6 +1026,28 @@ final class AppState: ObservableObject {
         reloadLibrary()
         if let reopen, sessions.contains(where: { $0.date == reopen }) { open(date: reopen) }
         else if activeDate == nil, let first = sessions.first { open(date: first.date) }
+    }
+
+    // MARK: - Phone previews
+
+    /// Warm the phone preview cache for freshly ingested sessions in the
+    /// background so the first phone request is instant. Low QoS and
+    /// cancellable; nothing here touches the UI path.
+    private func warmPreviews(_ dates: [String], cfg: PCConfig) {
+        for date in dates {
+            guard let pairs = try? Library.pairs(cfg: cfg, date: date), !pairs.isEmpty else { continue }
+            previewWarmTasks[date]?.cancel()
+            previewWarmTasks[date] = PreviewStore.warm(cfg: cfg, date: date, pairs: pairs)
+        }
+    }
+
+    /// A finalized session has no photos left: stop any warm-up that would
+    /// recreate its cache, then drop the cache.
+    private func discardPreviews(_ dates: Set<String>, cfg: PCConfig) {
+        for date in dates {
+            previewWarmTasks.removeValue(forKey: date)?.cancel()
+            try? PreviewStore.remove(cfg: cfg, date: date)
+        }
     }
 
     // MARK: - Empty session cleanup
@@ -1057,6 +1132,7 @@ final class AppState: ObservableObject {
                 ingestProgress = terminal
                 // Ingest can add to any date: old pair lists/undo references must be reloaded, not saved.
                 finishFileOperation(affected: knownSessionDates)
+                warmPreviews(result.folders, cfg: cfg)
                 toastMessage("Ingested \(result.copied) files into \(result.folders.count) session(s)")
             case .failure(let error):
                 terminal.error = error.localizedDescription; ingestProgress = terminal

@@ -8,6 +8,8 @@ let package = Package(
         .executable(name: "PhotoCull", targets: ["PhotoCullApp"]),
         .library(name: "PhotoCullCore", targets: ["PhotoCullCore"]),
         .library(name: "PhotoCullServer", targets: ["PhotoCullServer"]),
+        // The Mac host behind the HTTP API: PhotoCullCore answers CullServer's questions.
+        .library(name: "PhotoCullHost", targets: ["PhotoCullHost"]),
         .executable(name: "PhotoCullTests", targets: ["PhotoCullTests"]),
     ],
     dependencies: [
@@ -25,7 +27,12 @@ let package = Package(
                     .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
                 ],
                 swiftSettings: [.swiftLanguageMode(.v5)]),
-        .executableTarget(name: "PhotoCullApp", dependencies: ["PhotoCullCore"],
+        // The Mac host: the app's own library behind the HTTP API. Kept out of
+        // PhotoCullServer so the server stays usable by a headless host later.
+        .target(name: "PhotoCullHost",
+                dependencies: ["PhotoCullCore", "PhotoCullServer"],
+                swiftSettings: [.swiftLanguageMode(.v5)]),
+        .executableTarget(name: "PhotoCullApp", dependencies: ["PhotoCullCore", "PhotoCullHost"],
                           swiftSettings: [.swiftLanguageMode(.v5)]),
         .executableTarget(name: "PhotoCullTests", dependencies: ["PhotoCullCore"],
                           swiftSettings: [.swiftLanguageMode(.v5)]),

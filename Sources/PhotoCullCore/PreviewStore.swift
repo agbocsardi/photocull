@@ -87,6 +87,13 @@ public enum PreviewStore {
         return Preview(url: previewURL, etag: stamp.etag)
     }
 
+    /// ETag the preview for `pair` carries right now, without generating it.
+    /// Used to build the `?v=<etag>` preview URL in a session listing; matches
+    /// what `preview(cfg:date:pair:)` returns for the same source.
+    public static func etag(for pair: FilePair) throws -> String {
+        try sourceStamp(pair.jpg).etag
+    }
+
     /// Generate every missing/stale preview for `date` in the background: low
     /// QoS, bounded concurrency, skipping the work already up to date. Cancel
     /// the returned task to stop it between photos; errors are swallowed (a

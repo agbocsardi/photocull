@@ -66,6 +66,35 @@ run can never read or write the real library or real config. Delete the folder t
 reset it; `scripts/seed-dev-library.sh` fills the dev inbox with synthetic
 JPG+RAW sessions.
 
+## Culling from your phone
+
+The phone bridge is opt-in and needs no server: the app hosts the API itself
+(`docs/REMOTE-CULL.md`). To try it in a development build:
+
+1. Make sure `pwa/` exists at the repository root. `scripts/build-app.sh` copies it
+   into `dist/PhotoCull.app/Contents/Resources/pwa`. A dev run without a bundled
+   copy (`swift run`, `.build/*/PhotoCull`) serves the checkout's `pwa/` directly,
+   so editing the web app needs no rebuild; only an installed build with no
+   bundled PWA serves the API alone.
+2. Start a dev build — `swift run PhotoCull` or `open dist/PhotoCull.app`. Both
+   are DEV mode, so the phone API serves the throwaway dev library
+   (`scripts/seed-dev-library.sh` fills it with synthetic sessions).
+3. **PhotoCull > Settings (⌘,) > Cull from phone**: switch serving on. The API
+   listens on `127.0.0.1:8723` with a pairing key kept in the Keychain (dev builds
+   use their own Keychain entry, never the installed app's). The panel shows the
+   pairing URL/QR and the Tailscale HTTPS step; the app itself never runs a
+   mutating tailscale command.
+4. Check it without a phone:
+
+   ```bash
+   TOKEN=<pairing key from the panel>
+   curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8723/api/sessions
+   ```
+
+Phone-made decisions land in the session sidecar exactly like Mac edits; the
+open session's ~1 s sidecar poll picks them up and other sidebar rows refresh
+themselves.
+
 ### Known toolchain constraint
 
 The `@State` SwiftUI macro needs the `SwiftUIMacros` plugin, which ships only with Xcode.

@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import PhotoCullCore
+import PhotoCullHost
 
 @main
 enum PhotoCullMain {
@@ -111,6 +112,7 @@ struct PhotoCullApp: App {
 
     @MainActor private var connectedApp: AppState {
         delegate.operationState = app
+        RemoteCullWiring.installOnce(app: app)
         return app
     }
 
@@ -135,7 +137,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     weak var operationState: AppState?
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        operationState?.prepareForTermination() == false ? .terminateCancel : .terminateNow
+        guard operationState?.prepareForTermination() != false else { return .terminateCancel }
+        guard RemoteCullWiring.installed else { return .terminateNow }
+        // Release the phone API's loopback listener before the process goes away.
+        Task { @MainActor in
+            await RemoteCullWiring.shutdown()
+            NSApp.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -153,5 +162,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Cull from phone holds an idle-sleep assertion; drop it before the process goes away.
     func applicationWillTerminate(_ notification: Notification) {
         RemoteCull.releaseIdleSleep()
+    }
+}
+
+/// Brings the embedded HTTP API up behind the "Cull from phone" panel.
+///
+/// Lives in the entry-point file on purpose: the headless check harnesses
+/// compile every other app source without PhotoCullHost, so the app module
+/// proper (AppState, RemoteCull, …) stays free of the server dependency.
+@MainActor
+enum RemoteCullWiring {
+    /// The listener lives for the process; only the panel's hooks reach it.
+    private static let server = CullServerHost()
+    /// The app's current, mode-gated config — the server's only library.
+    private static var config: PCConfig?
+    private(set) static var installed = false
+
+    /// Called once the window exists (the first view body evaluation); starts
+    /// serving again if the owner left "Cull from phone" on.
+    static func installOnce(app: AppState) {
+        guard !installed, !app.fixtureMode, Snapshot.requestedPath == nil else { return }
+        installed = true
+        config = app.cfg
+        RemoteCull.shared.hooks = .init(
+            start: { port, token in
+                guard let cfg = config else { throw CullServerHost.HostError.notConfigured }
+                try await server.start(cfg: cfg, port: port, token: token)
+            },
+            stop: { await server.stop() })
+        // Settings can repoint the library while serving: never keep answering
+        // from the folders the app has left behind.
+        app.configDidApply = { [weak app] applied in
+            config = applied
+            Task { @MainActor in
+                do { try await server.reconfigure(cfg: applied) }
+                catch {
+                    let message = "Could not restart the phone server: \(error.localizedDescription)"
+                    RemoteCull.shared.serverFailed(message)
+                    app?.toastMessage(message)
+                }
+            }
+        }
+        Task { await RemoteCull.shared.resumeIfEnabled() }
+    }
+
+    static func shutdown() async {
+        await server.stop()
     }
 }
