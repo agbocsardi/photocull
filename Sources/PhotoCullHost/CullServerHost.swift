@@ -51,7 +51,9 @@ public actor CullServerHost {
     /// same port, same token, fresh backend. A no-op when nothing is serving —
     /// the next `start` picks the new config up by itself.
     public func reconfigure(cfg: PCConfig) async throws {
-        guard let current = running, current.cfg != cfg else { return }
+        // Only the folders and extensions shape what is served.
+        guard let current = running,
+              current.cfg.paths != cfg.paths || current.cfg.files != cfg.files else { return }
         running = nil
         await current.server.stop()
         try await start(cfg: cfg, port: current.port, token: current.token)

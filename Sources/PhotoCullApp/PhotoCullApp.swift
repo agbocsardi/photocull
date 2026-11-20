@@ -196,7 +196,11 @@ enum RemoteCullWiring {
             config = applied
             Task { @MainActor in
                 do { try await server.reconfigure(cfg: applied) }
-                catch { app?.toastMessage("Could not restart the phone server: \(error.localizedDescription)") }
+                catch {
+                    let message = "Could not restart the phone server: \(error.localizedDescription)"
+                    RemoteCull.shared.serverFailed(message)
+                    app?.toastMessage(message)
+                }
             }
         }
         Task { await RemoteCull.shared.resumeIfEnabled() }

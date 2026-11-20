@@ -159,6 +159,15 @@ final class RemoteCull: ObservableObject {
         }
     }
 
+    /// The listener died underneath the panel (e.g. a restart after a
+    /// Settings change could not bind). Show it as off with the reason.
+    func serverFailed(_ message: String) {
+        enabled = false
+        status = .error(message)
+        Self.idleSleep.release()
+        holdsSleepAssertion = false
+    }
+
     /// Start on launch when the owner left this on. Wave 2 calls this once,
     /// after installing real hooks; the default hooks stay off.
     func resumeIfEnabled() async {

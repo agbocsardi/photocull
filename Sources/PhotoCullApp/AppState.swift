@@ -490,7 +490,8 @@ final class AppState: ObservableObject {
     /// edits capture.
     private func writeMerge(_ target: Session, _ date: String) throws {
         let folder = Library.inboxFolder(cfg: cfg, date: date)
-        let merged = try SessionStore.merge(target, folder: folder)
+        // Main thread: wait only long enough for a phone write's ~1 ms merge.
+        let merged = try SessionStore.merge(target, folder: folder, retryFor: 0.03)
         let changed = !target.hasSameContent(as: merged)
         target.adopt(merged)
         if changed, target === session { revision += 1 }

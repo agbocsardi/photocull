@@ -24,7 +24,7 @@ public enum SessionStore {
     /// reporting `SessionLockedError`. Long enough for the other writer's
     /// merge to finish, short enough that a running Finalize (which owns the
     /// lock for minutes) is reported promptly.
-    static let lockRetryWindow: TimeInterval = 0.25
+    public static let lockRetryWindow: TimeInterval = 0.25
     static let lockRetryInterval: TimeInterval = 0.005
 
     /// Merge `incoming` (the writer's session) into `folder`'s on-disk sidecar
@@ -32,15 +32,17 @@ public enum SessionStore {
     /// wins and an equal stamp keeps the on-disk value; `incoming`'s
     /// `last_index` is written as the writer's own cursor.
     @discardableResult
-    public static func merge(_ incoming: Session, folder: URL) throws -> Session {
-        try update(folder) { disk in disk.merged(with: incoming) }
+    /// `retryFor` bounds the lock wait; main-thread callers pass a short one.
+    public static func merge(_ incoming: Session, folder: URL,
+                             retryFor window: TimeInterval = lockRetryWindow) throws -> Session {
+        try update(folder, retryFor: window) { disk in disk.merged(with: incoming) }
     }
 
     /// Apply remote changes to the on-disk sidecar with the same rule and
     /// return the written session. Replaying a queue is idempotent.
     @discardableResult
     public static func apply(_ changes: [SessionChange], folder: URL) throws -> Session {
-        try update(folder) { disk in
+        try update(folder, retryFor: lockRetryWindow) { disk in
             for change in changes { disk.apply(change) }
             return disk
         }
@@ -50,8 +52,9 @@ public enum SessionStore {
     /// The sidecar is read through the pinned directory descriptor (never a
     /// swapped symlink), and a strictly unreadable one throws instead of
     /// being replaced.
-    private static func update(_ folder: URL, _ merge: (Session) throws -> Session) throws -> Session {
-        let directory = try lock(folder)
+    private static func update(_ folder: URL, retryFor window: TimeInterval,
+                               _ merge: (Session) throws -> Session) throws -> Session {
+        let directory = try lock(folder, retryFor: window)
         defer { directory.releaseLock() }
         let disk = try FinalizeSidecar.capture(directory).session()
         let merged = try merge(disk)
@@ -63,8 +66,8 @@ public enum SessionStore {
 
     /// Take the session folder lock, retrying briefly while another writer
     /// holds it. Anything else (not a directory, I/O failure) is thrown as is.
-    private static func lock(_ folder: URL) throws -> FinalizeDirectory {
-        let deadline = Date().addingTimeInterval(lockRetryWindow)
+    private static func lock(_ folder: URL, retryFor window: TimeInterval) throws -> FinalizeDirectory {
+        let deadline = Date().addingTimeInterval(window)
         while true {
             do {
                 return try FinalizeDirectory(folder, lock: true)
