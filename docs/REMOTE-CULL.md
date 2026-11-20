@@ -53,7 +53,8 @@ hands it to the phone in the URL fragment: `https://<host>:8443/#token=<token>`.
 The PWA stores it and removes the fragment from the address bar.
 
 The server binds `127.0.0.1` only. Remote access goes through
-`tailscale serve`, which adds HTTPS.
+`tailscale serve`, which adds HTTPS on tailnet port 8443 (never 443: this Mac
+may already serve another app there).
 
 Errors: `{"error": "<message>"}` with 400 (bad input), 401 (bad or missing
 token), 404 (unknown session or stem), 409 (session locked, e.g. Finalize is
@@ -117,7 +118,9 @@ Off by default. When on, the app:
   library (LibraryMode applies unchanged: dev builds serve the dev library);
 - shows the pairing URL as a QR code;
 - detects Tailscale and shows or runs `tailscale serve --bg --https=8443 http://127.0.0.1:<port>`,
-  using the Mac's MagicDNS name for the URL. HTTPS uses the dedicated tailnet
-  port 8443, never 443 (other apps may already serve there), and the app
-  refuses to replace an 8443 handler it did not create;
-- holds a "prevent idle sleep" power assertion while serving.
+  using the Mac's MagicDNS name for the URL (`https://<magicdns>:8443/`). HTTPS
+  uses the dedicated tailnet port 8443, never 443 (other apps may already serve
+  there). It refuses to run when 8443 already carries something else, and
+  reports "HTTPS ready" when the handler already points at this port;
+- holds a "prevent idle sleep" power assertion while serving, and says so only
+  when the assertion was actually taken.
