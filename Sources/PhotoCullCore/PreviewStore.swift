@@ -70,8 +70,7 @@ public enum PreviewStore {
 
         // Serialize per preview path: concurrent callers for the same stem wait
         // instead of writing the same file twice, then see the fresh result
-        // below. Distinct stems still generate in parallel. The dictionary holds
-        // one tiny lock per cached photo for the process lifetime.
+        // below. Distinct stems mostly generate in parallel (striped locks).
         let lock = lock(forPath: previewURL.path)
         lock.lock()
         defer { lock.unlock() }
@@ -95,7 +94,7 @@ public enum PreviewStore {
     @discardableResult
     public static func warm(cfg: PCConfig, date: String, pairs: [FilePair],
                             concurrency: Int = 3) -> Task<Void, Never> {
-        let width = min(max(concurrency, 2), 4)
+        let width = min(max(concurrency, 1), 4)
         return Task.detached(priority: .utility) {
             await withTaskGroup(of: Void.self) { group in
                 var next = 0
@@ -123,6 +122,7 @@ public enum PreviewStore {
 
     /// Drop one date's cached previews (session finalized or removed). No-op
     /// when nothing was cached. Nothing outside the preview cache is touched.
+    /// Cancel any `warm` task for `date` first, or it can recreate previews.
     public static func remove(cfg: PCConfig, date: String) throws {
         try validate(date, name: "date")
         let folder = try directory(cfg: cfg, date: date)
@@ -223,15 +223,11 @@ public enum PreviewStore {
 
     // MARK: - Per-path locks
 
-    private static let registryLock = NSLock()
-    private static var pathLocks: [String: NSLock] = [:]
+    /// Fixed stripe of locks: same-path callers always share one, and the
+    /// set never grows with the library.
+    private static let stripes = (0..<16).map { _ in NSLock() }
 
     private static func lock(forPath path: String) -> NSLock {
-        registryLock.lock()
-        defer { registryLock.unlock() }
-        if let existing = pathLocks[path] { return existing }
-        let created = NSLock()
-        pathLocks[path] = created
-        return created
+        stripes[Int(UInt(bitPattern: path.hashValue) % UInt(stripes.count))]
     }
 }
