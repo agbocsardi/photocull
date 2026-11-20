@@ -36,25 +36,40 @@ public enum Library {
             guard isDir else { continue }
             let date = entry.lastPathComponent
 
-            guard let pairs = try? FilePairs.pairs(folder: entry,
-                                                   jpgExts: cfg.jpgExtSet,
-                                                   rawExts: cfg.rawExtSet) else { continue }
-
-            // Corrupt session file behaves like a fresh one (Go ignores the error).
-            let session = (try? Session.load(folder: entry)) ?? Session.fresh()
-            let stems = FilePairs.stems(pairs)
-            let counts = session.statusCounts(stems: stems)
-            rows.append(SessionRow(date: date,
-                                   total: pairs.count,
-                                   keep: counts.keep,
-                                   reject: counts.reject,
-                                   undecided: counts.undecided,
-                                   status: session.folderStatus(stems: stems),
-                                   cropped: session.crops.count))
+            guard let row = row(cfg: cfg, folder: entry, date: date) else { continue }
+            rows.append(row)
         }
 
         rows.sort { $0.date > $1.date }
         return rows
+    }
+
+    /// One session row re-derived from disk, or nil when `date` is not a
+    /// session folder. Cheap enough for the sidebar to refresh a single row
+    /// after another writer (the embedded API) changed that session.
+    public static func row(cfg: PCConfig, date: String) -> SessionRow? {
+        let folder = inboxFolder(cfg: cfg, date: date)
+        let isDir = (try? folder.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+        guard isDir else { return nil }
+        return row(cfg: cfg, folder: folder, date: date)
+    }
+
+    private static func row(cfg: PCConfig, folder: URL, date: String) -> SessionRow? {
+        guard let pairs = try? FilePairs.pairs(folder: folder,
+                                               jpgExts: cfg.jpgExtSet,
+                                               rawExts: cfg.rawExtSet) else { return nil }
+
+        // Corrupt session file behaves like a fresh one (Go ignores the error).
+        let session = (try? Session.load(folder: folder)) ?? Session.fresh()
+        let stems = FilePairs.stems(pairs)
+        let counts = session.statusCounts(stems: stems)
+        return SessionRow(date: date,
+                          total: pairs.count,
+                          keep: counts.keep,
+                          reject: counts.reject,
+                          undecided: counts.undecided,
+                          status: session.folderStatus(stems: stems),
+                          cropped: session.crops.count)
     }
 
     /// Pairs for one date folder.

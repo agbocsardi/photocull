@@ -17,7 +17,10 @@ Single-machine mode needs no server: everything below is opt-in.
   server holds a hash-verified copy (later phase).
 - **Decisions and edits** live in the session sidecar `.photocull.json`. Every
   writer (Mac UI, embedded API, future server) does read → merge → write under
-  the session-folder lock, so concurrent writers never clobber each other.
+  the session-folder lock, so concurrent writers never clobber each other. Two
+  writers that collide for the few milliseconds a merge takes are absorbed by a
+  short retry (~250 ms) inside the sidecar store, so a 409 from the API means a
+  long owner such as Finalize, not a lost race with the Mac's own save.
 - Session folders must keep containing **only photos and the sidecar**.
   Finalize's cleanup refuses folders with anything else. Previews and other
   derived data live outside the inbox.
@@ -109,13 +112,18 @@ immutable` (the URL carries `?v=<etag>`).
 Mac host: generated with ImageIO from the JPG, cached at
 `<parent of inbox>/.photocull-previews/<date>/<STEM>.jpg`. Regenerated when the
 source JPG's size or modification time changes (recorded beside it). Lazily on
-request, plus a background warm-up after ingest. Previews are disposable.
+request, plus a background warm-up after ingest. A date's cache is dropped when
+that session is finalized (the photos are gone). Previews are disposable.
 
 ## 5. Mac "Cull from phone"
 
 Off by default. When on, the app:
 - starts the embedded API on `127.0.0.1:<port>` (default 8723) for the current
   library (LibraryMode applies unchanged: dev builds serve the dev library);
+- serves the PWA from the app bundle's `Contents/Resources/pwa`. Development
+  runs (any non-REAL mode) fall back to the repository's `pwa/` folder, so a
+  checkout can be served without rebuilding the app; an installed build with no
+  bundled PWA serves the API only;
 - shows the pairing URL as a QR code;
 - detects Tailscale and shows or runs `tailscale serve --bg --https=8443 http://127.0.0.1:<port>`,
   using the Mac's MagicDNS name for the URL (`https://<magicdns>:8443/`). HTTPS

@@ -39,6 +39,14 @@ else
   echo "note: resources/PhotoCullMenuBar.png missing — run scripts/build-icon.sh"
 fi
 
+# Phone web app (pwa/): served by the embedded API, no rebuild of the binary needed.
+if [ -d "$ROOT/pwa" ]; then
+  rm -rf "$APP/Contents/Resources/pwa"
+  cp -R "$ROOT/pwa" "$APP/Contents/Resources/pwa"
+else
+  echo "note: pwa/ missing — the app will serve the phone API only, without the web app"
+fi
+
 # Ad-hoc signature so macOS treats it as a normal app.
 codesign --force --sign - "$APP" >/dev/null 2>&1 || echo "note: ad-hoc codesign skipped"
 
