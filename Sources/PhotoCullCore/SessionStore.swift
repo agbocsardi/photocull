@@ -49,6 +49,8 @@ public enum SessionStore {
         defer { directory.releaseLock() }
         let disk = try FinalizeSidecar.capture(directory).session()
         let merged = try merge(disk)
+        // The lock pins the original inode; refuse if the path now names another folder.
+        try directory.verifyVisible()
         try merged.save(folder: directory.url)
         return merged
     }

@@ -508,6 +508,7 @@ final class AppState: ObservableObject {
         redoStack.append(edit)
         if edit.target === session { revision += 1 }
         persist(edit.target, edit.date)
+        if edit.target !== session, edit.date == activeDate { reloadSidecar() }
         refreshRows()
         toastMessage("Undid \(edit.what)")
     }
@@ -519,6 +520,7 @@ final class AppState: ObservableObject {
         undoStack.append(edit)
         if edit.target === session { revision += 1 }
         persist(edit.target, edit.date)
+        if edit.target !== session, edit.date == activeDate { reloadSidecar() }
         refreshRows()
         toastMessage("Redid \(edit.what)")
     }
