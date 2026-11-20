@@ -158,7 +158,7 @@ inspect the interface from a terminal.
 | Inbox | `~/Pictures/PhotoCull/inbox/<YYYY-MM-DD>/` |
 | Archive | `~/Pictures/PhotoCull/archive/<YYYY-MM-DD>/` |
 | Dump | `~/Downloads/<date>/` (or `<first> to <last>` for multi-session) |
-| Session state | `<date>/.photocull.json` — `version`, `decisions`, `last_index`, plus optional crop, tilt and rotation maps |
+| Session state | `<date>/.photocull.json` — `version`, `decisions`, `last_index`, plus optional crop, tilt, rotation and per-field sync `stamps` maps |
 | Repair logs | `~/.config/photocull/pair-repair-<timestamp>.json` |
 
 `crops` is additive: the Go app ignores it, and this app ignores nothing the Go app writes.

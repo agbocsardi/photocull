@@ -38,13 +38,35 @@ File: `<inbox>/{date}/.photocull.json`.
 
 - Decision values: `keep` | `reject` | `undecided`. Absence == undecided.
 - Stem keys are **UPPERCASED**.
-- `save` writes sorted keys, 2-space indent, and includes `crops` only when non-empty.
+- `save` writes sorted keys, 2-space indent, and includes `crops`, `tilts`,
+  `rotations` and `stamps` only when non-empty. A sidecar with no stamps still
+  encodes byte-identically to the Go shape.
 - `load` on a missing file → `Session.fresh()` (no throw). Corrupt JSON → fresh session
   is acceptable, but prefer throwing only on I/O errors; a corrupt file must not crash.
 - `folderStatus`: no stems → `.empty`; no stem present in `decisions` → `.unstarted`;
   every stem present → `.complete`; else `.inProgress`.
 - `CropRect.isFullFrame` tolerance 0.005 per edge. `clamped(minSize:)` clamps to 0...1
   and ensures `w >= minSize`, `h >= minSize` while keeping the rect inside the frame.
+
+### Sync stamps and merge (`SessionStore.swift`)
+
+`stamps[STEM][field]` is the Unix-ms time of the last change to that field
+(`decision`, `crop`, `tilt`, `rotation`); a missing stamp reads as 0. Every
+setter records "now" and accepts an explicit stamp for replaying a change.
+Clearing a value (undecided, no crop, zero tilt, zero rotation) removes it from
+its map but **keeps its stamp**, so a clear can win over an older set.
+
+Merge is per (stem, field): the larger stamp wins, an equal stamp keeps the
+value already on disk, and `last_index` is not merged (the writer's own cursor
+is written). `Session.merged(with:)` applies that rule, `Session.apply(_:)`
+applies one `SessionChange` with it (replays are idempotent), and
+`SessionStore.merge`/`SessionStore.apply` do read → merge → atomic write under
+the session folder's `flock` — the same lock Finalize holds for its whole run.
+A lock held elsewhere throws the distinct `SessionLockedError` immediately
+(HTTP 409) instead of blocking; a strictly unreadable sidecar throws instead of
+being replaced. The Mac app writes only through the store, adopts the merged
+result in place, and polls the sidecar (~1 s) to fold other writers' changes
+into the open session without ever writing on its own.
 
 ## 3. File pairs (`FilePair.swift`)
 
