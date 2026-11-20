@@ -98,6 +98,8 @@ struct SettingsView: View {
                     .tabItem { Label("Files", systemImage: "photo") }
                 FinalizeTab(draft: draft, readOnly: readOnly)
                     .tabItem { Label("Finalize", systemImage: "checkmark.circle") }
+                RemoteCullPanel(remote: .shared)
+                    .tabItem { Label("Cull from phone", systemImage: "iphone") }
                 GeneralTab(draft: draft, readOnly: readOnly)
                     .tabItem { Label("General", systemImage: "gearshape") }
             }

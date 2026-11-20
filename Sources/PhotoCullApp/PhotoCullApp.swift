@@ -149,4 +149,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    /// Cull from phone holds an idle-sleep assertion; drop it before the process goes away.
+    func applicationWillTerminate(_ notification: Notification) {
+        RemoteCull.releaseIdleSleep()
+    }
 }
