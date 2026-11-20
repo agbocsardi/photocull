@@ -57,6 +57,12 @@ final class RemoteCull: ObservableObject {
     @Published private(set) var serve = ServeConfiguration.unknown
     /// Last result of the "Set up HTTPS with Tailscale" action (or its error).
     @Published private(set) var serveNote: String?
+    /// Something the owner must know about the pairing key, e.g. the Keychain
+    /// refused to store it. Cleared once a later key is saved.
+    @Published private(set) var pairingNote: String?
+    /// Whether the idle-sleep hold is actually in place: creating it can fail,
+    /// in which case the Mac is not kept awake and the panel must not say so.
+    @Published private(set) var holdsSleepAssertion = false
 
     var hooks = ServerHooks.unavailable
 
@@ -70,7 +76,11 @@ final class RemoteCull: ObservableObject {
         status = .off
         enabled = false
         busy = false
-        token = RemoteTokenStore.loadOrCreate() ?? ""
+        let key = RemoteTokenStore.loadOrCreate()
+        token = key?.token ?? ""
+        if let key, RemoteTokenStore.persists, !key.saved {
+            pairingNote = "Pairing key could not be saved to your Keychain"
+        }
         port = Self.storedPort()
         launchEnabled = Self.storedEnabled()
     }
@@ -80,15 +90,22 @@ final class RemoteCull: ObservableObject {
     /// Dev and fixture runs serve the throwaway library; the panel says so.
     var isDevelopmentLibrary: Bool { LibraryMode.current != .real }
 
-    /// `https://<magicdns>/#token=<token>` when Tailscale knows this Mac's
+    /// `https://<magicdns>:8443/#token=<token>` when Tailscale knows this Mac's
     /// name. The PWA needs HTTPS, so there is no local-network alternative.
     var pairingURL: String? {
         guard let name = tailscale.magicDNSName, !token.isEmpty else { return nil }
-        return "https://\(name)/#token=\(token)"
+        return "https://\(name):\(Tailscale.httpsPort)/#token=\(token)"
     }
 
-    /// `tailscale serve --bg --https=443 http://127.0.0.1:<port>`.
+    /// `tailscale serve --bg --https=8443 http://127.0.0.1:<port>`.
     var serveCommand: String { Tailscale.serveCommandText(port: port) }
+
+    /// The dedicated HTTPS port already forwards to this app's API.
+    var httpsReady: Bool { serve.serves(port: port) }
+
+    /// The dedicated HTTPS port is taken by something that is not our API, so
+    /// running `tailscale serve` would hijack it. Never offer that.
+    var httpsPortConflict: Bool { serve.isConfigured && !httpsReady }
 
     /// Cached QR image for the current pairing URL.
     var qrImage: NSImage? {
@@ -122,6 +139,7 @@ final class RemoteCull: ObservableObject {
         } else {
             await hooks.stop()
             Self.idleSleep.release()
+            holdsSleepAssertion = false
             setLaunchEnabled(false)
         }
         busy = false
@@ -130,12 +148,13 @@ final class RemoteCull: ObservableObject {
     private func beginServing() async {
         do {
             try await hooks.start(port, token)
-            Self.idleSleep.adopt(reason: Self.sleepReason)
+            holdsSleepAssertion = Self.idleSleep.adopt(reason: Self.sleepReason)
             status = .serving
             setLaunchEnabled(true)
         } catch {
             enabled = false
             status = .error(error.localizedDescription)
+            holdsSleepAssertion = false
             setLaunchEnabled(false)
         }
     }
@@ -160,23 +179,28 @@ final class RemoteCull: ObservableObject {
         AppDefaults.store.set(String(port), forKey: Self.portKey)
     }
 
-    /// Replace the pairing key; every already-paired phone stops working.
+    /// Replace the pairing key; every already-paired phone stops working. A
+    /// failure keeps the old key working but is always shown to the owner.
     func resetPairing() async {
         guard !busy else { return }
         busy = true
         defer { busy = false }
         guard let fresh = RemoteTokenStore.regenerate() else {
-            if !enabled { status = .error("Could not create a pairing key.") }
+            pairingNote = "Could not create a pairing key."
             return
         }
         let wasServing = enabled
         if wasServing {
             await hooks.stop()
             Self.idleSleep.release()
+            holdsSleepAssertion = false
             status = .starting
         }
-        token = fresh
+        token = fresh.token
         qrCache = nil
+        pairingNote = RemoteTokenStore.persists && !fresh.saved
+            ? "Pairing key could not be saved to your Keychain"
+            : nil
         if wasServing {
             await beginServing()
         }
@@ -202,12 +226,25 @@ final class RemoteCull: ObservableObject {
             serveNote = "Tailscale is not installed."
             return
         }
+        guard enabled else {
+            serveNote = "Turn on Cull from phone first, then set up HTTPS."
+            return
+        }
+        guard !httpsReady else {
+            serveNote = "HTTPS is already set up on port \(Tailscale.httpsPort)."
+            return
+        }
+        guard !httpsPortConflict else {
+            serveNote = "Port \(Tailscale.httpsPort) is already used by another service on this Mac."
+            return
+        }
         serveNote = "Running tailscale serve…"
         let result = await Tailscale.enableServe(cli: cli, port: port)
         switch result {
         case .success:
             let host = tailscale.magicDNSName ?? "this Mac"
-            serveNote = "Tailscale Serve now forwards https://\(host)/ to 127.0.0.1:\(port)."
+            serveNote = "Tailscale Serve now forwards https://\(host):\(Tailscale.httpsPort)/ "
+                + "to 127.0.0.1:\(port)."
         case .failed(let message):
             serveNote = message
         }

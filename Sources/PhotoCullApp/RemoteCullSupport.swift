@@ -14,11 +14,20 @@ import Security
 //    written to config.toml. Fixture runs keep it in memory only.
 //  - Tailscale: locate the CLI, read `status --json` and `serve status --json`
 //    (read-only), and run `serve --bg` only when the owner clicks the button.
+//    HTTPS lives on its own tailnet port (8443) so this Mac can keep serving
+//    other apps on 443.
 //  - QRCode: pairing URL → crisp NSImage through CIQRCodeGenerator.
 //  - SleepAssertion: the IOPM "prevent idle system sleep" hold used while
 //    serving.
 
 // MARK: - Pairing token
+
+/// A pairing key plus whether the Keychain accepted it. Fixture runs never
+/// persist, so their `saved` is false by design.
+struct RemoteKey: Equatable, Sendable {
+    let token: String
+    let saved: Bool
+}
 
 /// The pairing key handed to the phone in the URL fragment. 32 random bytes,
 /// base64url with no padding (43 characters).
@@ -39,31 +48,32 @@ enum RemoteTokenStore {
     /// Fixture-mode key: in memory only, gone with the process.
     private static var fixtureToken: String?
 
+    /// Whether this mode writes the key to the Keychain at all.
+    static var persists: Bool { service != nil }
+
     /// The stored key, or a fresh one saved for next launch. `nil` only if the
     /// system random generator failed, which should never happen.
-    static func loadOrCreate() -> String? {
+    static func loadOrCreate() -> RemoteKey? {
         if service == nil {
-            if let fixtureToken { return fixtureToken }
-            let fresh = generate()
+            if let fixtureToken { return RemoteKey(token: fixtureToken, saved: false) }
+            guard let fresh = generate() else { return nil }
             fixtureToken = fresh
-            return fresh
+            return RemoteKey(token: fresh, saved: false)
         }
-        if let saved = readKeychain() { return saved }
+        if let saved = readKeychain() { return RemoteKey(token: saved, saved: true) }
         guard let fresh = generate() else { return nil }
-        _ = writeKeychain(fresh)
-        return fresh
+        return RemoteKey(token: fresh, saved: writeKeychain(fresh))
     }
 
     /// Replace the key: every phone paired with the old one is invalidated.
-    static func regenerate() -> String? {
+    static func regenerate() -> RemoteKey? {
         guard let fresh = generate() else { return nil }
         if service == nil {
             fixtureToken = fresh
-            return fresh
+            return RemoteKey(token: fresh, saved: false)
         }
         deleteKeychain()
-        _ = writeKeychain(fresh)
-        return fresh
+        return RemoteKey(token: fresh, saved: writeKeychain(fresh))
     }
 
     /// 32 random bytes as unpadded base64url.
@@ -110,6 +120,9 @@ enum RemoteTokenStore {
         deleteKeychain()
         var attributes = query(service: service)
         attributes[kSecValueData as String] = Data(token.utf8)
+        // Unlocked-only: the phone API is useless while the login session is
+        // locked, and this keeps the key off an unlocked-disk copy.
+        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlocked
         return SecItemAdd(attributes as CFDictionary, nil) == errSecSuccess
     }
 
@@ -148,25 +161,37 @@ struct TailscaleInfo: Equatable, Sendable {
     }
 }
 
-/// The `tailscale serve` handler that fronts this machine, from
-/// `tailscale serve status --json`. `.unknown` means the CLI was missing or the
-/// read failed — not "nothing configured".
+/// What `tailscale serve status --json` says about the dedicated HTTPS port.
+/// `.unknown` means the CLI was missing or the read failed — not "nothing
+/// configured".
 enum ServeConfiguration: Equatable, Sendable {
     case unknown
     case none
+    /// An HTTPS handler on the dedicated port, forwarding to this target.
     case proxy(String)
+    /// A TCP forwarder (or a TLS endpoint without a web handler) on the
+    /// dedicated port. Only the owner can sort that out; never overwrite it.
+    case tcp(String?)
 
     var proxyURL: String? {
         if case .proxy(let url) = self { return url }
         return nil
     }
 
-    var port: Int? {
-        guard let url = proxyURL, let parsed = URL(string: url) else { return nil }
-        return parsed.port
+    /// Something already occupies the dedicated HTTPS port, ours or not.
+    var isConfigured: Bool {
+        switch self {
+        case .proxy, .tcp: return true
+        case .unknown, .none: return false
+        }
     }
 
-    func serves(port: Int) -> Bool { self.port == port }
+    /// Whether the handler on the dedicated port forwards to 127.0.0.1:`port`,
+    /// i.e. to this app's own API.
+    func serves(port: Int) -> Bool {
+        guard let url = proxyURL, let parsed = URL(string: url) else { return false }
+        return parsed.port == port && (parsed.host == "127.0.0.1" || parsed.host == "localhost")
+    }
 }
 
 enum ServeSetupResult: Equatable, Sendable {
@@ -175,6 +200,15 @@ enum ServeSetupResult: Equatable, Sendable {
 }
 
 enum Tailscale {
+    /// The tailnet HTTPS port this app reserves. Never 443: this Mac may
+    /// already serve another app there.
+    static let httpsPort = 8443
+
+    /// How long one CLI read may take before it is killed and reported as a
+    /// failure. Status is local and fast; a hang means the daemon is wedged and
+    /// Settings must not wait on it.
+    static let timeout: TimeInterval = 10
+
     /// The CLI locations Tailscale documents for the standalone app, Homebrew
     /// and the installer, in that order.
     static let candidates = [
@@ -189,13 +223,17 @@ enum Tailscale {
 
     /// Exactly the command docs/REMOTE-CULL.md specifies, as arguments.
     static func serveArguments(port: Int) -> [String] {
-        ["serve", "--bg", "--https=443", "http://127.0.0.1:\(port)"]
+        ["serve", "--bg", "--https=\(httpsPort)", "http://127.0.0.1:\(port)"]
     }
 
     /// The same command as text, for copying into a terminal.
     static func serveCommandText(port: Int) -> String {
         (["tailscale"] + serveArguments(port: port)).joined(separator: " ")
     }
+
+    /// How the owner removes just this endpoint again (`off` repeats the HTTPS
+    /// flag; the target is optional).
+    static var removeCommandText: String { "tailscale serve --https=\(httpsPort) off" }
 
     /// `tailscale status --json`, off the main thread.
     static func info() async -> TailscaleInfo {
@@ -207,9 +245,8 @@ enum Tailscale {
         await Task.detached(priority: .utility) { blockingServeConfiguration() }.value
     }
 
-    /// Runs `tailscale serve --bg --https=443 http://127.0.0.1:<port>`.
-    /// Only called from the owner's confirmation in Settings — never on launch,
-    /// never in a headless check.
+    /// Runs `tailscale serve --bg --https=8443 http://127.0.0.1:<port>`.
+    /// Only called from the owner's confirmation in Settings — never on launch.
     static func enableServe(cli: String, port: Int) async -> ServeSetupResult {
         await Task.detached(priority: .userInitiated) { () -> ServeSetupResult in
             let result = execute(cli, serveArguments(port: port))
@@ -223,7 +260,7 @@ enum Tailscale {
         }.value
     }
 
-    // MARK: Parsing (also exercised by the throwaway headless check)
+    // MARK: Parsing
 
     static func parse(status json: Data, cliPath: String?) -> TailscaleInfo {
         guard let root = try? JSONSerialization.jsonObject(with: json) as? [String: Any] else {
@@ -238,16 +275,24 @@ enum Tailscale {
                              online: (selfNode?["Online"] as? Bool) ?? false)
     }
 
+    /// Reads the handler on the dedicated HTTPS port. Web keys are
+    /// `<host>:8443`; a bare `TCP` entry for the same port means something that
+    /// is not an HTTPS proxy for this app already has it.
     static func parse(serve json: Data) -> ServeConfiguration {
         guard let root = try? JSONSerialization.jsonObject(with: json) as? [String: Any] else {
             return .unknown
         }
+        let suffix = ":\(httpsPort)"
         let web = root["Web"] as? [String: Any] ?? [:]
-        for host in web.keys.sorted() where host.hasSuffix(":443") {
+        for host in web.keys.sorted() where host.hasSuffix(suffix) {
             let handlers = (web[host] as? [String: Any])?["Handlers"] as? [String: Any]
             if let proxy = (handlers?["/"] as? [String: Any])?["Proxy"] as? String {
                 return .proxy(proxy)
             }
+        }
+        let tcp = root["TCP"] as? [String: Any] ?? [:]
+        if let entry = tcp[String(httpsPort)] as? [String: Any] {
+            return .tcp(entry["TCPForward"] as? String)
         }
         return .none
     }
@@ -268,8 +313,10 @@ enum Tailscale {
         return parse(serve: Data(result.output.utf8))
     }
 
-    /// Blocking process run. stdout and stderr share one pipe: every caller
-    /// either parses JSON (which only happens on success) or shows the text.
+    /// Blocking process run with a hard timeout. stdout and stderr share one
+    /// pipe: every caller either parses JSON (which only happens on success) or
+    /// shows the text. A CLI that hangs is terminated and reported as failed
+    /// with "timed out" in the message.
     private static func execute(_ executable: String, _ arguments: [String]) -> (status: Int32, output: String) {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
@@ -278,15 +325,49 @@ enum Tailscale {
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = pipe
+
+        let exited = DispatchSemaphore(value: 0)
+        process.terminationHandler = { _ in exited.signal() }
         do {
             try process.run()
         } catch {
             return (-1, error.localizedDescription)
         }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return (process.terminationStatus, String(decoding: data, as: UTF8.self))
+
+        // Drain on another queue: a full pipe would block the CLI, and then the
+        // wait below could only ever time out.
+        let drained = DispatchSemaphore(value: 0)
+        let output = ProcessOutput()
+        DispatchQueue.global(qos: .utility).async {
+            output.data = pipe.fileHandleForReading.readDataToEndOfFile()
+            drained.signal()
+        }
+
+        if exited.wait(timeout: .now() + timeout) == .timedOut {
+            process.terminate()
+            if exited.wait(timeout: .now() + 2) == .timedOut {
+                kill(process.processIdentifier, SIGKILL)
+                _ = exited.wait(timeout: .now() + 1)
+            }
+            _ = drained.wait(timeout: .now() + 2)
+            return (-1, "tailscale timed out after \(Int(timeout)) seconds.")
+        }
+        _ = drained.wait(timeout: .now() + 2)
+        return (process.terminationStatus, output.text)
     }
+}
+
+/// Pipe output shared with the reading queue.
+private final class ProcessOutput: @unchecked Sendable {
+    private let lock = NSLock()
+    private var raw = Data()
+
+    var data: Data {
+        get { lock.lock(); defer { lock.unlock() }; return raw }
+        set { lock.lock(); raw = newValue; lock.unlock() }
+    }
+
+    var text: String { String(decoding: data, as: UTF8.self) }
 }
 
 // MARK: - QR code

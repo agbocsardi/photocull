@@ -75,6 +75,12 @@ struct RemoteCullPanel: View {
                 .padding(.top, Metric.elementGap / 2)
                 .help("Serve this library to a phone through Tailscale.")
             statusLine
+            if let note = remote.pairingNote {
+                Label(note, systemImage: "exclamationmark.triangle")
+                    .font(Typo.caption)
+                    .foregroundStyle(Palette.warning)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             portRow
         }
     }
@@ -194,20 +200,26 @@ struct RemoteCullPanel: View {
                          tint: remote.tailscale.running ? Palette.keep : Palette.secondary)
             InspectorRow(label: "MagicDNS", value: remote.tailscale.magicDNSName ?? "—", mono: true)
             InspectorRow(label: "HTTPS", value: httpsText,
-                         tint: remote.serve.serves(port: remote.port) ? Palette.keep : Palette.secondary)
+                         tint: remote.httpsReady ? Palette.keep : Palette.secondary)
 
-            Text("PhotoCull keeps the API on 127.0.0.1. Tailscale Serve adds the certificate and "
-                 + "forwards your tailnet to it. Nothing is exposed to the public internet.")
+            Text("PhotoCull keeps the API on 127.0.0.1. Tailscale Serve adds the certificate on "
+                 + "port \(Tailscale.httpsPort) of this Mac's tailnet name and forwards it to "
+                 + "PhotoCull. Nothing is exposed to the public internet.")
                 .font(Typo.caption)
                 .foregroundStyle(Palette.tertiary)
                 .fixedSize(horizontal: false, vertical: true)
 
+            if remote.httpsPortConflict {
+                Label(conflictNote, systemImage: "exclamationmark.triangle")
+                    .font(Typo.caption)
+                    .foregroundStyle(Palette.warning)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             HStack(spacing: Metric.elementGap) {
                 Button("Set up HTTPS with Tailscale") { ui.value.confirmation = .serve }
                     .disabled(!canSetUpHTTPS)
-                    .help(canSetUpHTTPS
-                          ? "Run tailscale serve for this port."
-                          : "Needs Tailscale installed, connected and signed in.")
+                    .help(setupHelp)
                 Button("Copy Command") { copyToPasteboard(remote.serveCommand) }
                     .help("Copy the command to run it in Terminal yourself.")
                 Spacer(minLength: 0)
@@ -249,16 +261,24 @@ struct RemoteCullPanel: View {
             Label("The Mac must stay on and awake while you cull.", systemImage: "power")
                 .font(Typo.callout)
                 .foregroundStyle(Palette.secondary)
-            if remote.status == .serving {
+            if remote.status == .serving && remote.holdsSleepAssertion {
                 Label("Mac stays awake while serving.", systemImage: "moon.zzz")
                     .font(Typo.caption)
                     .foregroundStyle(Palette.tertiary)
+            } else if remote.status == .serving {
+                Label("Could not keep this Mac awake — turn off idle sleep in Energy settings.",
+                      systemImage: "moon.zzz")
+                    .font(Typo.caption)
+                    .foregroundStyle(Palette.warning)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Text("While serving, other Mac apps may notice this Mac does not idle-sleep. "
-                 + "Turning Cull from phone off, or quitting PhotoCull, releases that hold.")
-                .font(Typo.caption)
-                .foregroundStyle(Palette.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
+            if remote.holdsSleepAssertion {
+                Text("While serving, other Mac apps may notice this Mac does not idle-sleep. "
+                     + "Turning Cull from phone off, or quitting PhotoCull, releases that hold.")
+                    .font(Typo.caption)
+                    .foregroundStyle(Palette.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
@@ -310,22 +330,42 @@ struct RemoteCullPanel: View {
         case .none:
             return "Not set up"
         case .proxy(let url):
-            return remote.serve.serves(port: remote.port) ? "Set up for this port" : "Forwarding \(url)"
+            return remote.httpsReady ? "HTTPS ready" : "Port \(Tailscale.httpsPort) forwards \(url)"
+        case .tcp(let target):
+            return "Port \(Tailscale.httpsPort) is taken\(target.map { " by \($0)" } ?? "")"
         }
     }
 
+    /// Something other than PhotoCull answers on the dedicated HTTPS port.
+    private var conflictNote: String {
+        "Port \(Tailscale.httpsPort) is already used on this Mac. PhotoCull will not overwrite it; "
+            + "free that port (or remove its handler) before setting up HTTPS."
+    }
+
     private var canSetUpHTTPS: Bool {
-        remote.tailscale.cliPath != nil && remote.tailscale.running
+        remote.enabled && remote.tailscale.cliPath != nil && remote.tailscale.running
             && remote.tailscale.magicDNSName != nil
+            && !remote.httpsReady && !remote.httpsPortConflict
+    }
+
+    private var setupHelp: String {
+        if !remote.enabled { return "Turn on Cull from phone first." }
+        if remote.httpsReady { return "HTTPS is already set up on port \(Tailscale.httpsPort)." }
+        if remote.httpsPortConflict {
+            return "Port \(Tailscale.httpsPort) is already used by another service on this Mac."
+        }
+        return "Run tailscale serve for this port."
     }
 
     private var serveConfirmation: String {
         let host = remote.tailscale.magicDNSName ?? "this Mac"
         return "PhotoCull runs:\n\n\(remote.serveCommand)\n\n"
-            + "Tailscale Serve then forwards https://\(host)/ to PhotoCull on 127.0.0.1:\(remote.port), "
-            + "with a real certificate. The setting stays on after PhotoCull quits and is reachable by "
-            + "every device signed in to your tailnet; the pairing key still protects the photo API. "
-            + "Remove it any time with “tailscale serve reset”."
+            + "This adds an HTTPS endpoint on port \(Tailscale.httpsPort) of this Mac's tailnet name "
+            + "(https://\(host):\(Tailscale.httpsPort)/) and forwards it to PhotoCull on "
+            + "127.0.0.1:\(remote.port), with a real certificate. Port 443 is left alone. "
+            + "The setting survives quitting PhotoCull and is reachable by every device signed in "
+            + "to your tailnet; the pairing key still protects the photo API. "
+            + "Remove it again with “\(Tailscale.removeCommandText)”."
     }
 
     // MARK: Actions
