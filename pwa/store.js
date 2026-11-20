@@ -106,7 +106,14 @@ export async function pendingCount() {
  */
 export async function resolveSent(sent) {
   const current = new Map((await allPending()).map((rec) => [rec.key, rec]));
-  const keys = sent.filter((rec) => current.get(rec.key)?.at === rec.at).map((rec) => rec.key);
+  // Only drop an entry that is still exactly what was sent: a newer local edit
+  // may share the key (same `at`) but carry a different value.
+  const keys = sent
+    .filter((rec) => {
+      const now = current.get(rec.key);
+      return now && now.at === rec.at && now.value === rec.value;
+    })
+    .map((rec) => rec.key);
   if (!keys.length) return [];
   const db = await openDB();
   const tx = db.transaction(OUTBOX, 'readwrite');

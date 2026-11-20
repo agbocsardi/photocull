@@ -9,8 +9,9 @@ const FIRST_DELAY = 2000;
 const MAX_DELAY = 60000;
 
 export class Sync {
-  constructor({ api, onStatus, onSession, onAuthError, onDropped }) {
+  constructor({ api, seq, onStatus, onSession, onAuthError, onDropped }) {
     this.api = api;
+    this.seq = seq || null; // numbers a request at its start; lets callers drop stale bodies
     this.onStatus = onStatus || (() => {});
     this.onSession = onSession || (() => {});
     this.onAuthError = onAuthError || (() => {});
@@ -80,9 +81,12 @@ export class Sync {
         byDate.get(rec.date).push(rec);
       }
 
+      let retry = false;
       for (const [date, group] of byDate) {
         group.sort((a, b) => a.at - b.at);
         const changes = group.map(({ stem, field, value, at }) => ({ stem, field, value, at }));
+        // Taken before the POST: a body is stale once a newer fetch was applied.
+        const seq = this.seq ? this.seq() : 0;
 
         try {
           const body = await this.api.changes(date, changes);
@@ -91,12 +95,12 @@ export class Sync {
           this.offline = false;
           const removed = await store.resolveSent(group);
           await this.refresh();
-          this.onSession(date, body, removed);
+          this.onSession(date, body, removed, seq);
         } catch (err) {
           if (!(err instanceof ApiError)) {
             this.offline = true;
-            this.schedule(this.nextDelay());
-            return;
+            retry = true; // other dates still get their chance
+            continue;
           }
           if (err.status === 401) {
             this.onAuthError();
@@ -106,21 +110,22 @@ export class Sync {
             // Session locked (e.g. Finalize is running): retry later.
             this.limited = true;
             this.publish();
-            this.schedule(this.nextDelay());
-            return;
+            retry = true;
+            continue;
           }
           if (err.status === 0 || err.status >= 500) {
             this.offline = err.status === 0;
             this.publish();
-            this.schedule(this.nextDelay());
-            return;
-          }          // 400/404: the session or stem is gone; replaying can never succeed.
+            retry = true;
+            continue;
+          }
+          // 400/404: the session or stem is gone; replaying can never succeed.
           await store.resolveSent(group);
           await this.refresh();
           this.onDropped({ date, count: group.length, message: err.message });
-          return;
         }
       }
+      if (retry) this.schedule(this.nextDelay());
     } finally {
       this.busy = false;
       await this.refresh();

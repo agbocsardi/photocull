@@ -3,19 +3,18 @@
 // Three strategies, one job each (docs/REMOTE-CULL.md §3):
 //   app shell   cache-first, versioned cache name, navigation falls back to it
 //   /api/ JSON  network only — never cached, so a 401 or an error is never replayed
-//   previews    cache-first (URLs are immutable, `?v=<etag>`), LRU-ish size cap
+//   previews    cache-first (URLs are immutable, `?v=<etag>`), FIFO size cap
 //
 // Preview requests come from <img>, which cannot carry the Authorization header,
 // so this worker adds it. The token lives in IndexedDB next to the outbox and is
 // also pushed in by the page on every load.
 
-const SHELL_CACHE = 'photocull-shell-v1';
+const SHELL_CACHE = 'photocull-shell-v2';
 const PREVIEW_CACHE = 'photocull-preview-v1';
 const PREVIEW_LIMIT = 400; // ~400 previews ≈ a few hundred MB at the top end
 
 const SHELL = [
-  './',
-  './index.html',
+  './index.html', // what shellNavigation serves for every navigation
   './styles.css',
   './app.js',
   './api.js',
@@ -128,8 +127,7 @@ self.addEventListener('fetch', (event) => {
 async function shellNavigation(request) {
   const cache = await caches.open(SHELL_CACHE);
   const indexURL = new URL('./index.html', self.location).href;
-  const cached =
-    (await cache.match(indexURL)) || (await cache.match(new URL('./', self.location).href));
+  const cached = await cache.match(indexURL);
   if (cached) return cached;
   try {
     const response = await fetch(request);

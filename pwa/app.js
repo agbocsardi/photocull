@@ -18,6 +18,8 @@ const state = {
   hostName: '',
   view: 'boot',
   serial: 0,
+  fetchSeq: 0, // bumped at every session request start (poll, POST, open)
+  appliedSeq: 0, // highest fetchSeq whose body was applied
 
   sessions: [],
   date: null,
@@ -46,11 +48,14 @@ init();
 async function init() {
   cacheElements();
   wireEvents();
-  await registerServiceWorker();
 
+  // Strip the pairing fragment before the (possibly slow) worker registration,
+  // so the token never lingers in the address bar.
   const fromHash = takeTokenFromHash();
   const token = fromHash || (await store.getToken());
   if (fromHash) await store.setToken(fromHash);
+
+  await registerServiceWorker();
 
   if (token) {
     startWithToken(token);
@@ -59,7 +64,6 @@ async function init() {
     return;
   }
 
-  history.replaceState({ v: currentRoute().view }, '', location.href);
   render();
 }
 
@@ -146,6 +150,7 @@ async function startWithToken(token) {
   state.api = new Api(token);
   state.sync = new Sync({
     api: state.api,
+    seq: () => ++state.fetchSeq,
     onStatus: setSyncStatus,
     onSession: adoptFromSync,
     onAuthError: () => unpair({ revoked: true }),
@@ -353,6 +358,7 @@ async function openSession(date) {
   }
 
   const serial = ++state.serial;
+  const seq = ++state.fetchSeq;
   state.view = 'cull';
   state.date = date;
   state.session = null;
@@ -373,7 +379,7 @@ async function openSession(date) {
   try {
     const body = await state.api.session(date);
     if (serial !== state.serial) return;
-    applySession(body, { initial: true });
+    applySession(body, { initial: true, seq });
     startPoll();
   } catch (err) {
     if (serial !== state.serial) return;
@@ -399,8 +405,15 @@ async function loadPending(date) {
   state.sync?.refresh();
 }
 
-function applySession(body, { initial = false } = {}) {
+function applySession(body, { initial = false, seq = 0 } = {}) {
+  // A body fetched before a newer one was applied must not regress the state.
+  if (seq && seq < state.appliedSeq) return;
+  if (seq) state.appliedSeq = seq;
+
   const previousStem = state.stem;
+  const previousIndex = state.session
+    ? state.session.photos.findIndex((photo) => photo.stem === previousStem)
+    : -1;
   const photos = (Array.isArray(body.photos) ? body.photos : []).map((photo) => {
     const pendingDecision = state.pending.get(`${photo.stem}|decision`);
     const pendingRotation = state.pending.get(`${photo.stem}|rotation`);
@@ -422,11 +435,30 @@ function applySession(body, { initial = false } = {}) {
     const last = Number(body.last_index);
     const index = Number.isFinite(last) ? Math.min(Math.max(0, Math.trunc(last)), photos.length - 1) : 0;
     state.stem = photos.length ? photos[index].stem : null;
-  } else if (!photos.some((photo) => photo.stem === previousStem)) {
-    state.stem = photos.length ? photos[0].stem : null;
+  } else {
+    // The photo may have been decided elsewhere and left the filtered list:
+    // walk the cursor to the next one at the same position.
+    retargetStem(previousIndex);
   }
 
   renderCull();
+}
+
+/** Keep the cursor on a photo the current filter shows. */
+function retargetStem(fromIndex = -1) {
+  const list = visiblePhotos();
+  if (list.some((photo) => photo.stem === state.stem)) return;
+  if (!list.length) {
+    state.stem = null;
+    return;
+  }
+  if (state.filter === 'undecided' && fromIndex >= 0) {
+    const order = new Map(state.session.photos.map((photo, i) => [photo.stem, i]));
+    const at = list.filter((photo) => order.get(photo.stem) < fromIndex).length;
+    state.stem = list[Math.min(at, list.length - 1)].stem;
+    return;
+  }
+  state.stem = list[0].stem;
 }
 
 function visiblePhotos() {
@@ -442,6 +474,7 @@ function currentPhoto() {
 }
 
 function renderCull() {
+  retargetStem();
   updateTopbar();
   renderPhoto();
 }
@@ -510,10 +543,81 @@ function renderPhoto() {
   el.stageImg.hidden = false;
   if (el.stageImg.dataset.src !== url) {
     el.stageImg.dataset.src = url;
-    el.stageImg.src = url;
+    showPreview(url);
   }
   fitStage();
   preloadAround(visiblePhotos());
+}
+
+/**
+ * <img> cannot carry the Authorization header, so the worker adds it. When the
+ * page is not controlled (hard reload, slow first claim, no worker at all) the
+ * same bytes are fetched here with the header and served from an object URL.
+ */
+function showPreview(url) {
+  if (!url) {
+    el.stageImg.removeAttribute('src');
+    return;
+  }
+  const cached = cachedObjectUrl(url);
+  if (cached) {
+    el.stageImg.src = cached;
+    return;
+  }
+  if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+    el.stageImg.src = url; // fast path: the worker authorises and caches it
+    return;
+  }
+  fetchPreviewObjectUrl(url);
+}
+
+function cachedObjectUrl(url) {
+  const entry = preloads.get(url);
+  return entry && entry.objectUrl ? entry.objectUrl : null;
+}
+
+async function fetchPreviewObjectUrl(url, attempt = 0) {
+  if (!state.token || !url) return;
+  try {
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${state.token}` },
+      credentials: 'same-origin',
+    });
+    if (response.status === 401) {
+      unpair({ revoked: true });
+      return;
+    }
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const objectUrl = URL.createObjectURL(await response.blob());
+    rememberObjectUrl(url, objectUrl);
+    if (el.stageImg.dataset.src === url) el.stageImg.src = objectUrl;
+  } catch {
+    if (attempt < 1) return fetchPreviewObjectUrl(url, attempt + 1);
+    if (el.stageImg.dataset.src === url) setStageMessage('Preview unavailable.');
+  }
+}
+
+function rememberObjectUrl(url, objectUrl) {
+  const entry = preloads.get(url) || {};
+  if (entry.objectUrl) URL.revokeObjectURL(entry.objectUrl);
+  preloads.set(url, { ...entry, objectUrl });
+  trimPreloads();
+}
+
+/** The preload map is the cap for both preloaded images and page-fetched blobs. */
+function trimPreloads() {
+  while (preloads.size > 12) {
+    const url = preloads.keys().next().value;
+    const entry = preloads.get(url);
+    if (url === el.stageImg.dataset.src && preloads.size > 1) {
+      // Never revoke the photo on screen; drop the next oldest instead.
+      preloads.delete(url);
+      preloads.set(url, entry);
+      continue;
+    }
+    preloads.delete(url);
+    if (entry.objectUrl) URL.revokeObjectURL(entry.objectUrl);
+  }
 }
 
 /** Fit the photo into the stage, accounting for the rotation quarter turns. */
@@ -543,16 +647,24 @@ function preloadAround(list) {
   const index = list.findIndex((photo) => photo.stem === state.stem);
   if (index < 0) return;
 
+  const controlled = Boolean(navigator.serviceWorker && navigator.serviceWorker.controller);
   for (const offset of [1, 2, 3, -1]) {
     const photo = list[index + offset];
-    if (!photo || !photo.preview || preloads.has(photo.preview)) continue;
+    if (!photo || !photo.preview) continue;
+    const url = photo.preview;
+    const entry = preloads.get(url);
+    if (entry && (entry.image || entry.objectUrl)) continue;
+    // Without a worker an <img> would get a 401; the active photo's fetch()
+    // path fills the cache instead.
+    const src = (entry && entry.objectUrl) || (controlled ? url : null);
+    if (!src) continue;
     const image = new Image();
     image.decoding = 'async';
-    image.src = photo.preview; // the service worker answers from its cache
+    image.src = src;
     if (image.decode) image.decode().catch(() => {});
-    preloads.set(photo.preview, image);
+    preloads.set(url, { image });
   }
-  while (preloads.size > 12) preloads.delete(preloads.keys().next().value);
+  trimPreloads();
 }
 
 // ------------------------------------------------------------------ actions
@@ -653,14 +765,18 @@ function renderSync() {
   }
 }
 
-function adoptFromSync(date, body, removedKeys) {
+function adoptFromSync(date, body, removedKeys, seq) {
   for (const key of removedKeys || []) {
-    const start = key.indexOf('|') + 1;
-    const end = key.lastIndexOf('|');
-    if (start > 0 && end > start) state.pending.delete(`${key.slice(start, end)}|${key.slice(end + 1)}`);
+    const first = key.indexOf('|');
+    const last = key.lastIndexOf('|');
+    if (first <= 0 || last <= first) continue;
+    // state.pending holds only the open session: keys from another date's
+    // flush belong to a different pending map.
+    if (key.slice(0, first) !== state.date) continue;
+    state.pending.delete(`${key.slice(first + 1, last)}|${key.slice(last + 1)}`);
   }
   if (state.view === 'cull' && state.date === date && state.session) {
-    applySession(body);
+    applySession(body, { seq });
   }
 }
 
@@ -680,12 +796,15 @@ async function pollOnce() {
   if (state.polling || !state.api || state.view !== 'cull' || !state.date) return;
   if (document.visibilityState !== 'visible') return;
   state.polling = true;
+  const seq = ++state.fetchSeq;
   try {
     const body = await state.api.session(state.date);
     if (state.view !== 'cull' || state.date !== body.date) return;
     state.unreachable = false;
     renderSync();
-    if (!state.session || body.rev !== state.session.rev) applySession(body, { initial: !state.session });
+    if (!state.session || body.rev !== state.session.rev) {
+      applySession(body, { initial: !state.session, seq });
+    }
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) unpair({ revoked: true });
     else if (err instanceof ApiError && err.status === 0) {
@@ -761,8 +880,14 @@ function wireStageGestures() {
 
   el.stageImg.addEventListener('load', () => fitStage());
   el.stageImg.addEventListener('error', () => {
-    if (!el.stageImg.dataset.src) return;
-    setStageMessage('Preview unavailable.');
+    const url = el.stageImg.dataset.src;
+    if (!url) return;
+    // The worker path failed (e.g. it had no token yet): retry through fetch().
+    if (cachedObjectUrl(url) === el.stageImg.src) {
+      setStageMessage('Preview unavailable.');
+      return;
+    }
+    fetchPreviewObjectUrl(url);
   });
 }
 
@@ -827,7 +952,7 @@ function onKeyDown(event) {
 // ------------------------------------------------------------ service worker
 
 async function registerServiceWorker() {
-  if (!('serviceWorker' in navigator)) return false;
+  if (!('serviceWorker' in navigator)) return;
   try {
     await navigator.serviceWorker.register('./sw.js', { scope: './' });
     await navigator.serviceWorker.ready;
@@ -847,10 +972,8 @@ async function registerServiceWorker() {
     navigator.serviceWorker.addEventListener('controllerchange', () => {
       if (state.token) postTokenToWorker(state.token);
     });
-    return Boolean(navigator.serviceWorker.controller);
   } catch (err) {
     console.warn('service worker unavailable', err);
-    return false;
   }
 }
 

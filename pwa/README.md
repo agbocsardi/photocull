@@ -28,9 +28,10 @@ returns to the pairing screen.
 
 The token is also handed to the service worker (`postMessage`), which needs it
 because `<img>` cannot send an `Authorization` header: the worker re-issues
-preview requests with the header and caches the result. Previews therefore
-require a controlled service worker — a browser with service workers disabled
-falls back to erroring images.
+preview requests with the header and caches the result. That is only the fast
+path: when the page is not controlled by a worker yet (hard reload, slow first
+claim, workers disabled) the page fetches the same bytes with `fetch()` and
+shows them from an object URL, retrying once on error.
 
 ## Culling behaviour
 
@@ -41,7 +42,9 @@ falls back to erroring images.
   all/undecided filter, `Esc` leaves the session.
 - After keep/reject the next photo opens automatically. Undecided counts as a
   keeper, so the only "safe" default is to leave photos alone.
-- All / Undecided filter; the filtered list keeps its own `n/total`.
+- All / Undecided filter; the filtered list keeps its own `n/total`. If the
+  photo on screen is decided on the Mac while the undecided filter is on, the
+  cursor moves to the next undecided photo at the same position.
 - Next 3 and previous 1 previews are preloaded via `Image`/`decode()`.
 
 ## Offline-first
