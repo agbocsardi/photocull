@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PhotoCull</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="description" content="Cull a PhotoCull session from your phone.">
+<meta name="theme-color" content="#101412">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PhotoCull">
+<meta name="format-detection" content="telephone=no">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png">
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+<!-- Pairing / unreachable host -->
+<section id="view-pair" class="view pair" hidden>
+  <div class="pair-card">
+    <img class="pair-icon" src="./icons/icon-192.png" alt="" width="64" height="64">
+    <h1 id="pair-title">Open the pairing link</h1>
+    <p id="pair-body">
+      On your Mac, turn on <strong>Cull from phone</strong> in PhotoCull and open the link
+      it shows (or scan its QR code) on this device.
+    </p>
+  </div>
+</section>
+
+<!-- Session list -->
+<section id="view-sessions" class="view sessions" hidden>
+  <header class="page-head">
+    <div class="head-line">
+      <h1>photocull</h1>
+      <span id="host-name" class="host"></span>
+    </div>
+    <div class="head-line sub">
+      <span id="list-sync" class="sync-pill">…</span>
+      <button id="refresh" class="mini-btn" type="button">Refresh</button>
+    </div>
+  </header>
+  <div id="session-scroll" class="scroll">
+    <div id="list-error" class="notice" hidden>
+      <p id="list-error-text">Can’t reach your Mac.</p>
+      <button id="list-error-retry" class="mini-btn" type="button">Try again</button>
+    </div>
+    <div id="session-list" class="session-list"></div>
+    <p id="session-empty" class="notice subtle" hidden>No sessions in the inbox yet.</p>
+  </div>
+  <footer class="list-foot">
+    <button id="unpair" class="mini-btn danger" type="button">Unpair this device</button>
+  </footer>
+</section>
+
+<!-- Culling -->
+<section id="view-cull" class="view cull" hidden>
+  <header class="topbar">
+    <button id="back" class="icon-btn" type="button" aria-label="Back to sessions">‹</button>
+    <div class="topbar-meta">
+      <div class="line">
+        <span id="cull-date" class="date">—</span>
+        <span id="cull-pos" class="mono dim">—</span>
+      </div>
+      <div class="line">
+        <span id="cull-stem" class="mono stem">—</span>
+        <span id="cull-raw" class="chip" hidden>RAW</span>
+      </div>
+    </div>
+    <span id="cull-badge" class="badge undecided">·</span>
+    <span id="sync-pill" class="sync-pill">…</span>
+  </header>
+
+  <div id="stage" class="stage">
+    <div id="frame" class="frame">
+      <img id="stage-img" alt="" draggable="false" hidden>
+    </div>
+    <div id="hint-left" class="hint left">REJECT</div>
+    <div id="hint-right" class="hint right">KEEP</div>
+    <p id="stage-msg" class="stage-msg">Loading…</p>
+  </div>
+
+  <div class="controls">
+    <div class="filters" role="group" aria-label="Filter">
+      <button class="filter-btn" data-filter="all" type="button">All</button>
+      <button class="filter-btn" data-filter="undecided" type="button">Undecided</button>
+    </div>
+    <div class="decide">
+      <button id="btn-reject" class="btn decide-btn reject" type="button">
+        <span class="glyph">✕</span><span>Reject</span>
+      </button>
+      <button id="btn-keep" class="btn decide-btn keep" type="button">
+        <span class="glyph">✓</span><span>Keep</span>
+      </button>
+    </div>
+    <div class="nav">
+      <button id="btn-prev" class="btn ghost nav-btn" type="button" aria-label="Previous photo">‹</button>
+      <button id="btn-rotate" class="btn ghost nav-btn" type="button" aria-label="Rotate clockwise">⟳</button>
+      <button id="btn-next" class="btn ghost nav-btn" type="button" aria-label="Next photo">›</button>
+    </div>
+  </div>
+</section>
+
+<div id="toast" class="toast" hidden></div>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>
