@@ -35,6 +35,7 @@ public actor CullServer {
     }
 
     private var running: Running?
+    private var starting = false
 
     public init() {}
 
@@ -43,13 +44,17 @@ public actor CullServer {
     /// Port actually bound, once listening (useful when `port: 0` was requested).
     public var boundPort: Int? { self.running?.port }
 
+    /// Callers must await `start()` before calling `stop()`; a `stop()` sent
+    /// while a start is in flight is a no-op.
     public func start(host: String = CullServer.defaultHost,
                       port: Int,
                       token: String,
                       staticRoot: URL? = nil,
                       backend: some CullBackend) async throws {
-        guard self.running == nil else { throw CullServerError.alreadyRunning }
+        guard self.running == nil, !self.starting else { throw CullServerError.alreadyRunning }
         guard !token.isEmpty else { throw CullServerError.emptyToken }
+        self.starting = true
+        defer { self.starting = false }
 
         let logger = Logger(label: "photocull.server")
         let signal = StartupSignal()
@@ -390,7 +395,7 @@ private struct BearerTokenMiddleware: RouterMiddleware {
 
     func handle(_ request: Request, context: BasicRequestContext,
                 next: (Request, BasicRequestContext) async throws -> Response) async throws -> Response {
-        guard request.uri.path.hasPrefix("/api") else {
+        guard isAPIPath(request.uri.path) else {
             return try await next(request, context)
         }
         guard let header = request.headers[.authorization],
@@ -413,21 +418,38 @@ private struct BearerTokenMiddleware: RouterMiddleware {
 private struct StaticFilesMiddleware: RouterMiddleware {
     typealias Context = BasicRequestContext
     let files: FileMiddleware<BasicRequestContext, LocalFileSystem>
+    let root: String
 
     init(root: String, logger: Logger) {
         self.files = FileMiddleware(root, searchForIndexHtml: true, logger: logger)
+        self.root = URL(fileURLWithPath: root).standardized.resolvingSymlinksInPath().path
+    }
+
+    /// FileMiddleware follows symlinked directories mid-path and truncates at
+    /// a decoded NUL; keep every request inside the resolved root.
+    private func contained(_ path: String) -> Bool {
+        guard let decoded = path.removingPercentEncoding, !decoded.contains("\0") else { return false }
+        let resolved = URL(fileURLWithPath: self.root + "/" + decoded)
+            .standardized.resolvingSymlinksInPath().path
+        return resolved == self.root || resolved.hasPrefix(self.root + "/")
     }
 
     func handle(_ request: Request, context: BasicRequestContext,
                 next: (Request, BasicRequestContext) async throws -> Response) async throws -> Response {
-        guard !request.uri.path.hasPrefix("/api") else {
+        guard !isAPIPath(request.uri.path) else {
             return try await next(request, context)
         }
+        guard contained(request.uri.path) else { throw HTTPError(.notFound) }
         // Terminal: static files never fall through to routes.
         return try await self.files.handle(request, context: context) { _, _ in
             throw HTTPError(.notFound)
         }
     }
+}
+
+/// `/api` and everything below it; `/apiconfig.js` is a static file.
+private func isAPIPath(_ path: String) -> Bool {
+    path == "/api" || path.hasPrefix("/api/")
 }
 
 // MARK: - Startup handshake
