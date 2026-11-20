@@ -49,7 +49,7 @@ Single-machine mode needs no server: everything below is opt-in.
 Base path `/api`. JSON, UTF-8. Every `/api` route requires
 `Authorization: Bearer <token>`; static PWA files under `/` do not.
 The token is a random 32-byte base64url string the host generates. Pairing
-hands it to the phone in the URL fragment: `https://<host>/#token=<token>`.
+hands it to the phone in the URL fragment: `https://<host>:8443/#token=<token>`.
 The PWA stores it and removes the fragment from the address bar.
 
 The server binds `127.0.0.1` only. Remote access goes through
@@ -116,6 +116,8 @@ Off by default. When on, the app:
 - starts the embedded API on `127.0.0.1:<port>` (default 8723) for the current
   library (LibraryMode applies unchanged: dev builds serve the dev library);
 - shows the pairing URL as a QR code;
-- detects Tailscale and shows or runs `tailscale serve --bg --https=443 http://127.0.0.1:<port>`,
-  using the Mac's MagicDNS name for the URL;
+- detects Tailscale and shows or runs `tailscale serve --bg --https=8443 http://127.0.0.1:<port>`,
+  using the Mac's MagicDNS name for the URL. HTTPS uses the dedicated tailnet
+  port 8443, never 443 (other apps may already serve there), and the app
+  refuses to replace an 8443 handler it did not create;
 - holds a "prevent idle sleep" power assertion while serving.
