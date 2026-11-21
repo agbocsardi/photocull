@@ -10,3 +10,5 @@ icon
 resources
 *.md
 *.dmg
+.env
+**/.env
