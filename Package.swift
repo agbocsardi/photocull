@@ -22,6 +22,8 @@ let package = Package(
         .library(name: "PhotoCullServer", targets: ["PhotoCullServer"]),
         // The host behind the HTTP API: PhotoCullCore answers CullServer's questions.
         .library(name: "PhotoCullHost", targets: ["PhotoCullHost"]),
+        // Headless host for a home server: the same API and PWA, own data root.
+        .executable(name: "photocull-serve", targets: ["PhotoCullServe"]),
         .executable(name: "PhotoCullTests", targets: ["PhotoCullTests"]),
     ],
     dependencies: [
@@ -44,6 +46,12 @@ let package = Package(
         .target(name: "PhotoCullHost",
                 dependencies: ["PhotoCullCore", "PhotoCullServer"],
                 swiftSettings: [.swiftLanguageMode(.v5)]),
+        // The home-server host: PhotoCullCore's library behind CullServer, with its
+        // own mode gate and data root instead of the Mac app's config. Built on
+        // Linux and macOS; no AppKit, no SwiftUI.
+        .executableTarget(name: "PhotoCullServe",
+                          dependencies: ["PhotoCullCore", "PhotoCullHost", "PhotoCullServer"],
+                          swiftSettings: [.swiftLanguageMode(.v5)]),
         .executableTarget(name: "PhotoCullTests", dependencies: ["PhotoCullCore"],
                           swiftSettings: [.swiftLanguageMode(.v5)]),
     ] + appTargets
