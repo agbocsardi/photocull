@@ -24,7 +24,7 @@ re-resolve them fails the build instead of shipping other versions.
 Set these once in the shell; the steps below use them:
 
 ```bash
-export PHOTOCULL_DATA=/mnt/shared/photocull
+export PHOTOCULL_DATA=/srv/photocull
 export PHOTOCULL_TOKEN="$HOME/.config/photocull-serve/token"
 export PHOTOCULL_UID=$(id -u) PHOTOCULL_GID=$(id -g)   # defaults: 1000:1000
 export PORT=8723                                       # default
@@ -32,9 +32,8 @@ export PORT=8723                                       # default
 
 ## 3. Data root
 
-A folder of its own, **not** inside Immich's (`/mnt/shared/immich` and its
-`library/` are Immich's, and its stack must never see foreign folders). For
-example `/mnt/shared/photocull`:
+A folder of its own, **not** inside another app's data (e.g. Immich's upload
+library — its stack must never see foreign folders). For example `/srv/photocull`:
 
 ```bash
 mkdir -p "$PHOTOCULL_DATA/inbox"
