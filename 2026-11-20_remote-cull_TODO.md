@@ -16,7 +16,7 @@ review with Pi GLM-5.3 (thinking high). One worktree per task. No new tests unle
 
 ## Wave 3 — home server
 - [x] L1-core: Core + Server + Host + tests build on Linux (swift:6.1-noble Docker); Darwin/ImageIO behind `#if canImport`; macOS-only app target; Linux PreviewStore serves cached previews only
-- [ ] L2-serve: `photocull-serve` executable, own data root, DEV default + REAL behind `--real` + marker file
+- [x] L2-serve: `photocull-serve` executable, own data root, DEV default + REAL behind `--real` + marker file
 - [ ] L3-deploy: Dockerfile + compose (host network, 127.0.0.1) for uhl, tailscale serve :8443 docs, dev-mode e2e against the container
 - [ ] Owner: verify macOS build/tests on the Mac after L1 (`scripts/test.sh`) — not checkable on Linux
 - [ ] Owner: create REAL data root + token on uhl and start the service
@@ -53,3 +53,4 @@ review with Pi GLM-5.3 (thinking high). One worktree per task. No new tests unle
 - Working on uhl itself (no Swift on host): build/verify Linux in `swift:6.1-noble` Docker. Baseline: PhotoCullServer already builds on Linux; Core fails on Darwin/ImageIO.
 - Plan: L1-core first (blocker), then L2-serve + L3-deploy in parallel against a fixed CLI contract. Implement: Pi DeepSeek V4.1 Flash (high); review: Pi GLM-5.3 (high).
 - L1-core merged. Review clean on code; fixed: Linux docs now use swift:6.2-noble (6.1 can't parse Hummingbird 2.29's tools-version and re-resolves Package.resolved). Waived: st_dev Int32 truncation in FinalizeIdentity (needs same inode+type across devices sharing low 32 bits), Ingest mtime re-apply `try?` (only affects EXIF-less fallback dates on Linux), Config fstat error text. L2-serve running.
+- L2-serve merged (a3c0991). Fixed: REAL gate refuses symlinked inbox/archive/dump (a symlinked inbox could write sidecars into the real library); docs say root + parent must be writable only by the service user (checks run once). Waived: dead `?? ""` on token path, `--port=N` form unsupported. PID-1 signal handling covered by compose `init: true`. L3-deploy in review.
