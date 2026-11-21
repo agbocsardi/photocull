@@ -1,0 +1,14 @@
+# Only the files deploy/Dockerfile copies are needed to build the image.
+.git
+.github
+.build
+dist
+Tests
+scripts
+docs
+icon
+resources
+*.md
+*.dmg
+.env
+**/.env

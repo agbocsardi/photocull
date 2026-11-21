@@ -139,6 +139,8 @@ Off by default. When on, the app:
 
 ## 6. Home server (`photocull-serve`)
 
+Deployment (Docker + `tailscale serve`): [HOME-SERVER.md](HOME-SERVER.md).
+
 A headless host for a library on a Linux home server (it builds on macOS too).
 It runs the same `CullServer` + `CoreCullBackend` as the app's embedded API and
 the same PWA — there is no second HTTP implementation — but it owns its data
