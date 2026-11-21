@@ -1,0 +1,33 @@
+# photocull-serve on the home server (docs/HOME-SERVER.md).
+#
+# network_mode: host is deliberate: the server always binds 127.0.0.1, and on the
+# host network that is the HOST's loopback, where `tailscale serve` picks it up.
+# Never publish ports and never bind 0.0.0.0 — the tailnet is the only way in.
+services:
+  photocull-serve:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: photocull-serve:dev
+    network_mode: host
+    init: true
+    restart: unless-stopped
+    # The service runs as the owner of the data root and of the token file.
+    user: "${PHOTOCULL_UID:-1000}:${PHOTOCULL_GID:-1000}"
+    read_only: true
+    tmpfs:
+      - /tmp
+    volumes:
+      # Absolute host paths, no defaults: compose refuses to start without them.
+      - "${PHOTOCULL_DATA:?set PHOTOCULL_DATA to the server's data root}:/data"
+      - "${PHOTOCULL_TOKEN:?set PHOTOCULL_TOKEN to the token file}:/run/photocull/token:ro"
+    command:
+      - --real
+      - --data-root
+      - /data
+      - --token-file
+      - /run/photocull/token
+      - --pwa
+      - /app/pwa
+      - --port
+      - "${PORT:-8723}"

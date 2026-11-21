@@ -27,4 +27,4 @@ Ingest copies rather than moves, so the card stays untouched. Crops, tilt and ro
 
 ## Building from source
 
-See the [development guide](docs/DEVELOPMENT.md) for build and test commands.
+See the [development guide](docs/DEVELOPMENT.md) for build and test commands. Culling from a phone and running it on a home server: [remote-culling contract](docs/REMOTE-CULL.md), [home server](docs/HOME-SERVER.md).
