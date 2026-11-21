@@ -136,3 +136,40 @@ Off by default. When on, the app:
   reports "HTTPS ready" when the handler already points at this port;
 - holds a "prevent idle sleep" power assertion while serving, and says so only
   when the assertion was actually taken.
+
+## 6. Home server (`photocull-serve`)
+
+A headless host for a library on a Linux home server (it builds on macOS too).
+It runs the same `CullServer` + `CoreCullBackend` as the app's embedded API and
+the same PWA — there is no second HTTP implementation — but it owns its data
+root instead of reading the app's config.
+
+```
+photocull-serve [--real --data-root PATH] [--port N] --token-file PATH [--pwa DIR]
+```
+
+- **DEV is the default.** Without `--real` the host serves the throwaway dev
+  library under `~/Library/Caches/PhotoCull-Dev/`, exactly like a dev build of
+  the app. DEV never takes an arbitrary folder: `--data-root` without `--real`
+  is a usage error.
+- **REAL needs both `--real` and `--data-root PATH`.** PATH must be absolute,
+  an existing real directory (not a symlink), and hold a regular file named
+  `.photocull-serve-root` that the owner creates once; the server never creates
+  it. The canonical PATH is refused if it equals, contains, or sits inside the
+  dev root, `~/Pictures/PhotoCull/` or `~/.config/photocull/`. REAL uses
+  `PATH/inbox`, `PATH/archive` and `PATH/dump` with the default file extensions
+  and finalize settings, and never reads `~/.config/photocull`. The folders are
+  not created: a missing inbox is logged and serves an empty session list.
+- `--port` defaults to 8723. The host always binds the API's loopback address
+  `127.0.0.1`; remote access stays `tailscale serve`'s job. There is no host flag.
+- `--token-file` is required: a regular file (not a symlink), not readable or
+  writable by group or others (`chmod 600`), holding the bearer token
+  (whitespace-trimmed, at least 32 characters). The token is never logged.
+- `--pwa DIR` serves that folder; otherwise `PWAStaticRoot.resolve(mode:)`, the
+  same resolution the app uses — a REAL host with no bundled PWA serves the API
+  only.
+- Startup prints the mode, data root, `127.0.0.1:<port>` and the PWA folder (or
+  "API only") to stderr. SIGINT/SIGTERM stop the listener cleanly.
+- Exit codes: 2 for a usage error (unknown flag, missing value, bad `--port`,
+  `--pwa` not a directory, `--data-root` without `--real`), 1 for a refused data
+  root or unacceptable token file.
