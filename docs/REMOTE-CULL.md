@@ -160,6 +160,9 @@ photocull-serve [--real --data-root PATH] [--port N] --token-file PATH [--pwa DI
   `PATH/inbox`, `PATH/archive` and `PATH/dump` with the default file extensions
   and finalize settings, and never reads `~/.config/photocull`. The folders are
   not created: a missing inbox is logged and serves an empty session list.
+  Any of them that exists must be a real directory, not a symlink. The checks
+  run once at startup, so keep PATH and its parent writable only by the
+  service user.
 - `--port` defaults to 8723. The host always binds the API's loopback address
   `127.0.0.1`; remote access stays `tailscale serve`'s job. There is no host flag.
 - `--token-file` is required: a regular file (not a symlink), not readable or

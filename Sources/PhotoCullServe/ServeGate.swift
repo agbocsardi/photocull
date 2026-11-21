@@ -93,6 +93,16 @@ enum ServeGate {
                 + "once to mark the folder as a PhotoCull data root")
         }
 
+        // A symlinked inbox/archive/dump would carry writes out of the checked
+        // root (e.g. into the real library), so each must be a real folder or absent.
+        for name in ["inbox", "archive", "dump"] {
+            var sub = stat()
+            if lstat(root + "/" + name, &sub) == 0, sub.st_mode & S_IFMT != S_IFDIR {
+                throw StartupError("--data-root \(root)/\(name) must be a real directory, not a "
+                    + "symlink or file; refusing")
+            }
+        }
+
         // The mode is decided before anything downstream can read it.
         LibraryMode.current = .real
         let defaults = PCConfig.defaultConfig()
