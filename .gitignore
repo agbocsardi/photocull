@@ -8,6 +8,5 @@ dist/
 .DS_Store
 *.xcuserstate
 
-# Local plans, logs and audits stay out of the public repo
-*_TODO.md
+# Local audits stay out of the public repo
 docs/performance-audit.md

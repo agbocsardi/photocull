@@ -23,6 +23,13 @@ AI agents develop this app on the owner's machine. The owner's real photo librar
   `find ~/Pictures/PhotoCull ~/.config/photocull -newer <marker>` (marker created
   before the run) that nothing real changed.
 
+## TODO files
+
+- Dated `*_TODO.md` plans are committed so other agents and worktrees can read
+  them. When every item is done, delete the file in a "Clean TODO" commit.
+- The repo is public: keep private details (hostnames, IPs, tokens, personal
+  paths beyond `~`) out of them.
+
 ## Headless checks
 
 - Run `scripts/test.sh` for everyday changes and `scripts/check-all.sh` before a release.
