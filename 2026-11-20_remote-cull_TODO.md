@@ -15,8 +15,11 @@ review with Pi GLM-5.3 (thinking high). One worktree per task. No new tests unle
 - [ ] W2-e2e: run dev build headless server against seeded dev library, drive API + PWA, verify no real-data writes
 
 ## Wave 3 — home server
-- [ ] Make Core build on Linux (split ImageIO/Darwin bits behind `#if canImport`)
-- [ ] `photocull-serve` executable (Linux), own data root + real/dev gate, deploy on homelab (Docker, behind tailscale serve)
+- [ ] L1-core: Core + Server + Host + tests build on Linux (swift:6.1-noble Docker); Darwin/ImageIO behind `#if canImport`; macOS-only app target; Linux PreviewStore serves cached previews only
+- [ ] L2-serve: `photocull-serve` executable, own data root, DEV default + REAL behind `--real` + marker file
+- [ ] L3-deploy: Dockerfile + compose (host network, 127.0.0.1) for uhl, tailscale serve :8443 docs, dev-mode e2e against the container
+- [ ] Owner: verify macOS build/tests on the Mac after L1 (`scripts/test.sh`) — not checkable on Linux
+- [ ] Owner: create REAL data root + token on uhl and start the service
 - [ ] Mac → server sync: previews first, then originals (JPG before RAW, skip RAW of rejects), resumable, hash-verified
 - [ ] Per-file sync state; Mac cache eviction only after server hash match; card "safe to wipe" after 2 verified copies
 - [ ] Decision sync Mac ↔ server via the same change API (offline queue on Mac)
@@ -45,3 +48,8 @@ review with Pi GLM-5.3 (thinking high). One worktree per task. No new tests unle
 - W1-remote-ui merged after fixes (8443, timeout, surfaced failures).
 - W1-pwa merged after fixes. Wave 1 complete. W2-wire running.
 - W2-wire merged (de1a944). dist/PhotoCull.app (dev) bundles pwa/. Next: owner tries phone culling on dev build; decide Linux build approach (Docker on uhl recommended).
+
+### 2026-11-21
+- Working on uhl itself (no Swift on host): build/verify Linux in `swift:6.1-noble` Docker. Baseline: PhotoCullServer already builds on Linux; Core fails on Darwin/ImageIO.
+- Plan: L1-core first (blocker), then L2-serve + L3-deploy in parallel against a fixed CLI contract. Implement: Pi DeepSeek V4.1 Flash (high); review: Pi GLM-5.3 (high).
+
