@@ -115,6 +115,10 @@ source JPG's size or modification time changes (recorded beside it). Lazily on
 request, plus a background warm-up after ingest. A date's cache is dropped when
 that session is finalized (the photos are gone). Previews are disposable.
 
+A host without ImageIO (the Linux server) cannot generate previews: it serves
+an already-cached one while that source stamp still matches, and the preview
+route answers 404 otherwise. The Mac will upload previews in a later phase.
+
 ## 5. Mac "Cull from phone"
 
 Off by default. When on, the app:

@@ -2,6 +2,7 @@ import Foundation
 import PhotoCullCore
 
 func suiteExif() throws {
+    #if canImport(ImageIO)  // real EXIF needs ImageIO
     // ── Fixture JPEG: real EXIF via ImageIO ──────────────────────────────
     if let fx = fixtureURL("20240503-DSCF2771.jpeg") {
         let info = ExifReader.read(url: fx)
@@ -45,6 +46,7 @@ func suiteExif() throws {
     } else {
         print("  (skip: fixture 20240503-DSCF2771.jpeg not present)")
     }
+    #endif
 
     // ── Junk JPEG: no EXIF → size-only info, mod-date captureDate ────────
     let tmp = try makeTempDir("exif")

@@ -4,22 +4,32 @@ import Foundation
 // Exit code 0 = all checks passed.
 // Synthetic, no-Trash regression only: PhotoCullTests --finalize-safety-only
 
-let allRunners: [(String, () throws -> Void)] = [
-    ("Config", suiteConfig),
-    ("FilePairs", suiteFilePairs),
-    ("Session", suiteSession),
-    ("Exif", suiteExif),
-    ("Ingest", suiteIngest),
-    ("Finalize", suiteFinalize),
-    ("FinalizeSafety", suiteFinalizeSafety),
-    ("FinalizeParallel", suiteFinalizeParallel),
-    ("IngestConcurrent", suiteIngestConcurrent),
-    ("ImagePipeline", suiteImagePipeline),
-    ("Rotation", suiteRotation),
-    ("Library", suiteLibrary),
-    ("EndToEnd", suiteEndToEnd),
-    ("PairRepair", suitePairRepair),
-]
+let allRunners: [(String, () throws -> Void)] = {
+    var runners: [(String, () throws -> Void)] = [
+        ("Config", suiteConfig),
+        ("FilePairs", suiteFilePairs),
+        ("Session", suiteSession),
+        ("Exif", suiteExif),
+        ("Ingest", suiteIngest),
+        ("Finalize", suiteFinalize),
+        ("FinalizeSafety", suiteFinalizeSafety),
+    ]
+    // Suites that decode or write JPEGs need ImageIO; the rest run everywhere.
+    #if canImport(ImageIO)
+    runners.append(("FinalizeParallel", suiteFinalizeParallel))
+    #endif
+    runners.append(("IngestConcurrent", suiteIngestConcurrent))
+    #if canImport(ImageIO)
+    runners.append(("ImagePipeline", suiteImagePipeline))
+    runners.append(("Rotation", suiteRotation))
+    #endif
+    runners.append(("Library", suiteLibrary))
+    #if canImport(ImageIO)
+    runners.append(("EndToEnd", suiteEndToEnd))
+    #endif
+    runners.append(("PairRepair", suitePairRepair))
+    return runners
+}()
 
 let args = Array(CommandLine.arguments.dropFirst())
 let runners: [(String, () throws -> Void)]

@@ -16,6 +16,19 @@ open dist/PhotoCull.app
 XCTest is not available in a CommandLineTools-only toolchain, so tests run through a small
 custom harness (`Sources/PhotoCullTests/Harness.swift`) rather than `swift test`.
 
+`PhotoCullCore`, `PhotoCullServer` and `PhotoCullHost` also build on Linux; the app target and
+its product are macOS-only. ImageIO is macOS-only, so on Linux metadata reads report just the
+file size, previews are served from an existing cache only, and Finalize's crop rendering and
+Trash are refused. Build and test a headless host in a container (Swift 6.2: the pinned
+Hummingbird needs tools 6.2, and older images silently re-resolve `Package.resolved`):
+
+```bash
+docker run --rm -u $(id -u):$(id -g) -e HOME=/tmp -v "$PWD":/src -w /src \
+  swift:6.2-noble swift build
+docker run --rm -u $(id -u):$(id -g) -e HOME=/tmp -v "$PWD":/src -w /src \
+  swift:6.2-noble swift run PhotoCullTests
+```
+
 ### Headless checks
 
 ```bash

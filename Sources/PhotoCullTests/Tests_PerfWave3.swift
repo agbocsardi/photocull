@@ -1,6 +1,8 @@
 import Foundation
 import PhotoCullCore
+#if canImport(ImageIO)
 import ImageIO
+#endif
 
 // Perf wave 3 tests: parallel finalize exports (B1), concurrent ingest copies
 // (B2), and the temp-file hygiene that comes with them. Exercise the new
@@ -14,6 +16,7 @@ private func tmpFiles(in dir: URL) -> [String] {
     return en.compactMap { ($0 as? URL)?.path }.filter { $0.hasSuffix(".tmp") }
 }
 
+#if canImport(ImageIO)  // fixture JPEGs need ImageIO
 func suiteFinalizeParallel() throws {
     let fm = FileManager.default
     guard let fx = fixtureURL("20240503-DSCF2771.jpeg") else {
@@ -180,6 +183,7 @@ func suiteFinalizeParallel() throws {
     check(!fm.fileExists(atPath: folder2.path), "re-run removes the sidecar-only inbox folder")
     check(tmpFiles(in: dump2).isEmpty, "no .tmp files after the successful re-run")
 }
+#endif
 
 func suiteIngestConcurrent() throws {
     let fm = FileManager.default

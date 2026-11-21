@@ -1,14 +1,26 @@
 // swift-tools-version:6.0
 import PackageDescription
 
+// The SwiftUI/AppKit app exists only on macOS. Core, Server and Host (and the
+// tests) must also build on Linux, where a headless home server will use them.
+#if os(macOS)
+let appProducts: [Product] = [.executable(name: "PhotoCull", targets: ["PhotoCullApp"])]
+let appTargets: [Target] = [
+    .executableTarget(name: "PhotoCullApp", dependencies: ["PhotoCullCore", "PhotoCullHost"],
+                      swiftSettings: [.swiftLanguageMode(.v5)]),
+]
+#else
+let appProducts: [Product] = []
+let appTargets: [Target] = []
+#endif
+
 let package = Package(
     name: "PhotoCull",
     platforms: [.macOS(.v14)],
-    products: [
-        .executable(name: "PhotoCull", targets: ["PhotoCullApp"]),
+    products: appProducts + [
         .library(name: "PhotoCullCore", targets: ["PhotoCullCore"]),
         .library(name: "PhotoCullServer", targets: ["PhotoCullServer"]),
-        // The Mac host behind the HTTP API: PhotoCullCore answers CullServer's questions.
+        // The host behind the HTTP API: PhotoCullCore answers CullServer's questions.
         .library(name: "PhotoCullHost", targets: ["PhotoCullHost"]),
         .executable(name: "PhotoCullTests", targets: ["PhotoCullTests"]),
     ],
@@ -19,22 +31,20 @@ let package = Package(
     ],
     targets: [
         .target(name: "PhotoCullCore", swiftSettings: [.swiftLanguageMode(.v5)]),
-        // Remote-culling HTTP API. Deliberately independent of PhotoCullCore and of
-        // AppKit/SwiftUI/ImageIO so it stays buildable on Linux later.
+        // Remote-culling HTTP API. Independent of PhotoCullCore and of ImageIO,
+        // so it builds everywhere.
         .target(name: "PhotoCullServer",
                 dependencies: [
                     .product(name: "Hummingbird", package: "hummingbird"),
                     .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
                 ],
                 swiftSettings: [.swiftLanguageMode(.v5)]),
-        // The Mac host: the app's own library behind the HTTP API. Kept out of
-        // PhotoCullServer so the server stays usable by a headless host later.
+        // The host: a library behind the HTTP API. Kept out of PhotoCullServer so
+        // the server stays usable by a headless host.
         .target(name: "PhotoCullHost",
                 dependencies: ["PhotoCullCore", "PhotoCullServer"],
                 swiftSettings: [.swiftLanguageMode(.v5)]),
-        .executableTarget(name: "PhotoCullApp", dependencies: ["PhotoCullCore", "PhotoCullHost"],
-                          swiftSettings: [.swiftLanguageMode(.v5)]),
         .executableTarget(name: "PhotoCullTests", dependencies: ["PhotoCullCore"],
                           swiftSettings: [.swiftLanguageMode(.v5)]),
-    ]
+    ] + appTargets
 )

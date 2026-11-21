@@ -1,6 +1,8 @@
 import Foundation
 import PhotoCullCore
+#if canImport(ImageIO)
 import ImageIO
+#endif
 
 func suiteFinalize() throws {
     let fm = FileManager.default
@@ -135,6 +137,7 @@ func suiteFinalize() throws {
     check(!exists(tmp.appendingPathComponent("inbox").appendingPathComponent(dB)),
           "runMulti removes second inbox folder")
 
+    #if canImport(ImageIO)  // crop rendering needs ImageIO
     // ── applyCrop: re-encoded dump from a non-full-frame crop ───────────
     if let fx = fixtureURL("20240503-DSCF2771.jpeg") {
         let date3 = "2024-07-04"
@@ -168,4 +171,5 @@ func suiteFinalize() throws {
     } else {
         print("  (skip: fixture JPEG not present for applyCrop test)")
     }
+    #endif
 }

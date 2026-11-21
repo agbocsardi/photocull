@@ -1,5 +1,9 @@
 import Foundation
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 public struct FinalizeStats: Sendable, Equatable {
     public var date: String
@@ -73,9 +77,11 @@ public enum Finalize {
                             cropMode: CropExportMode, dumpOverride: URL?,
                             hooks: FinalizeHooks) throws -> FinalizeResult {
         // Foreground work assertion; this option still allows idle system sleep.
+        #if canImport(Darwin)
         let activity = ProcessInfo.processInfo.beginActivity(options: .userInitiatedAllowingIdleSystemSleep,
                                                              reason: "PhotoCull finalize in progress")
         defer { ProcessInfo.processInfo.endActivity(activity) }
+        #endif
         let input = try FinalizeDirectory(inboxFolder(cfg: cfg, date: date), lock: true)
         // Finished OperationQueue closures may retain descriptors past return; ownership ends here, after drain.
         defer { input.releaseLock() }
@@ -325,7 +331,7 @@ public enum Finalize {
               let contents = cleanupContents(pinned) else { return false }
         return cleanupSessionFolder(pinned, expected: contents)
     }
-    @discardableResult package static func removeEmptyDirectory(_ folder: URL) -> Bool { Darwin.rmdir(folder.path) == 0 }
+    @discardableResult package static func removeEmptyDirectory(_ folder: URL) -> Bool { rmdir(folder.path) == 0 }
 
     private enum CleanupContents: Equatable {
         case empty, sidecar(FinalizeIdentity)
@@ -429,9 +435,15 @@ public enum Finalize {
         return sorted.count > 1 ? first + " to " + sorted.last! : first
     }
     @discardableResult static func trash(_ url: URL) throws -> URL? {
+        #if canImport(Darwin)
         var result: NSURL?
         try FileManager.default.trashItem(at: url, resultingItemURL: &result)
         return result as URL?
+        #else
+        // No platform Trash here. Never substitute a plain delete for it; the
+        // server's own trash folder is a later task.
+        throw FinalizeSafetyError("Finalize to Trash is unsupported on this platform")
+        #endif
     }
     static func inboxFolder(cfg: PCConfig, date: String) throws -> URL {
         try FinalizeDirectory.basename(date)
@@ -508,16 +520,26 @@ public enum Finalize {
             queue.addOperation {
                 while let index = work.admit(count: jobs.count) {
                     let job = jobs[index]
+                    let exportBody = {
+                        try hooks.boundary?("export", job.src)
+                        try input.verifyVisible(); try output?.verifyVisible(); try stage?.verifyVisible()
+                        try input.verify(job.src.lastPathComponent, identities[job.src.lastPathComponent]!)
+                        #if canImport(ImageIO)
+                        try ImagePipeline.export(src: job.src, crop: job.crop, to: job.stage!, quality: 0.9,
+                                                 tilt: job.tilt, quarterTurns: job.turns)
+                        try hooks.boundary?("exported", job.src)
+                        try input.verifyVisible(); try input.verify(job.src.lastPathComponent, identities[job.src.lastPathComponent]!)
+                        #else
+                        // Edited exports need ImageIO; no other decoder is assumed.
+                        throw FinalizeSafetyError("Editing crops, tilt and rotation is unsupported on this platform")
+                        #endif
+                    }
                     do {
-                        try autoreleasepool {
-                            try hooks.boundary?("export", job.src)
-                            try input.verifyVisible(); try output?.verifyVisible(); try stage?.verifyVisible()
-                            try input.verify(job.src.lastPathComponent, identities[job.src.lastPathComponent]!)
-                            try ImagePipeline.export(src: job.src, crop: job.crop, to: job.stage!, quality: 0.9,
-                                                     tilt: job.tilt, quarterTurns: job.turns)
-                            try hooks.boundary?("exported", job.src)
-                            try input.verifyVisible(); try input.verify(job.src.lastPathComponent, identities[job.src.lastPathComponent]!)
-                        }
+                        #if canImport(Darwin)
+                        try autoreleasepool { try exportBody() }
+                        #else
+                        try exportBody()
+                        #endif
                         work.finish(index, error: nil)
                     } catch {
                         work.finish(index, error: error)

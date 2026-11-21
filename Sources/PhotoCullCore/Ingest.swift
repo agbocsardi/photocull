@@ -69,10 +69,12 @@ public enum Ingest {
         // App Nap guard: mark CPU+IO as user-initiated so macOS does not
         // throttle the run, while still allowing idle *display* sleep
         // (not idleSystemSleepDisabled).
+        #if canImport(Darwin)
         let activity = ProcessInfo.processInfo.beginActivity(
             options: .userInitiatedAllowingIdleSystemSleep,
             reason: "PhotoCull ingest in progress")
         defer { ProcessInfo.processInfo.endActivity(activity) }
+        #endif
 
         let inboxRoot = URL(fileURLWithPath: PCConfig.expandHome(cfg.paths.inbox))
         let fm = FileManager.default
@@ -296,8 +298,16 @@ extension Ingest {
                     func add(_ i: Int) {
                         let job = jobs[i]
                         group.addTask {
-                            // copyItem preserves the modification date.
                             try FileManager.default.copyItem(at: job.src, to: job.dest)
+                            #if !canImport(Darwin)
+                            // Linux's copyItem drops the modification date, which
+                            // also picks the inbox folder for EXIF-less files.
+                            if let attrs = try? FileManager.default.attributesOfItem(atPath: job.src.path),
+                               let mod = attrs[.modificationDate] as? Date {
+                                try? FileManager.default.setAttributes([.modificationDate: mod],
+                                                                       ofItemAtPath: job.dest.path)
+                            }
+                            #endif
                             let snap = progressBox.update {
                                 $0.copied += 1
                                 $0.current = job.dest.lastPathComponent

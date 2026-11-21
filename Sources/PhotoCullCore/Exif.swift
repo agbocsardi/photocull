@@ -1,8 +1,11 @@
 import Foundation
+#if canImport(ImageIO)
 import ImageIO
 import CoreGraphics
+#endif
 
-// Exif.swift — metadata via ImageIO (CGImageSource).
+// Exif.swift — metadata via ImageIO (CGImageSource). Without ImageIO only the
+// file size is known, the same "nothing known" result an unreadable file gives.
 
 public struct PhotoInfo: Sendable, Equatable {
     public var camera: String?
@@ -35,6 +38,14 @@ public enum ExifReader {
             info.fileSizeBytes = bytes
         }
 
+        #if !canImport(ImageIO)
+        // No ImageIO here: nothing is known beyond the file size, exactly as for
+        // an unreadable file below.
+        if info.fileSizeBytes > 0 {
+            info.size = String(format: "%.1f MB", Double(info.fileSizeBytes) / 1e6)
+        }
+        return info
+        #else
         guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
               let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any] else {
             // No readable metadata: Go still stats the file for a size line.
@@ -116,11 +127,13 @@ public enum ExifReader {
         }
 
         return info
+        #endif
     }
 
     /// EXIF DateTimeOriginal as "YYYY-MM-DD", else file modification date,
     /// else "undated". Used by ingest for date folder naming.
     public static func captureDate(url: URL) -> String {
+        #if canImport(ImageIO)
         if let src = CGImageSourceCreateWithURL(url as CFURL, nil),
            let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any],
            let exif = props[kCGImagePropertyExifDictionary] as? [CFString: Any],
@@ -128,6 +141,7 @@ public enum ExifReader {
            let date = normalizedDate(dto) {
             return date
         }
+        #endif
         if let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
            let mod = attrs[.modificationDate] as? Date {
             let f = DateFormatter()
@@ -141,12 +155,16 @@ public enum ExifReader {
 
     /// Raw EXIF orientation (1...8) without reading pixel data. Defaults to 1.
     public static func orientation(url: URL) -> Int {
+        #if canImport(ImageIO)
         guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
               let props = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any],
               let o = props[kCGImagePropertyOrientation] as? Int, o >= 1 && o <= 8 else {
             return 1
         }
         return o
+        #else
+        return 1
+        #endif
     }
 
     /// "2024:05:03 14:22:31" → "2024-05-03 14:22:31" (best effort).

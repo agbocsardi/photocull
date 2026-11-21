@@ -43,6 +43,8 @@ public struct CoreCullBackend: CullBackend {
             switch error {
             case .invalidComponent: throw CullBackendError.notFound(error.description)
             case .sourceUnreadable, .decodeFailed: throw CullBackendError.failure(error.description)
+            // No ImageIO here: the Mac uploads previews; until then only cached ones exist.
+            case .generationUnavailable: throw CullBackendError.notFound(error.description)
             }
         } catch {
             throw CullBackendError.failure("preview failed: \(error.localizedDescription)")
