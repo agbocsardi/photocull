@@ -1,3 +1,4 @@
+#if canImport(ImageIO)  // needs CoreGraphics + ImageIO
 import Foundation
 import CoreGraphics
 import PhotoCullCore
@@ -259,3 +260,4 @@ func suiteImagePipeline() throws {
     check(solo.image(for: "one") === blocks,
           "single entry survives even when it alone exceeds the byte budget")
 }
+#endif

@@ -1,7 +1,13 @@
 import Foundation
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
+#if canImport(ImageIO)
 import CoreGraphics
 import ImageIO
+#endif
 
 /// Tiny test harness (XCTest is unavailable in a CommandLineTools-only toolchain).
 
@@ -91,6 +97,7 @@ public func canonicalPath(_ url: URL) -> String {
 /// (capture date, ISO, shutter, aperture). Written once per run, so the suite needs
 /// no real photos and runs the same on any machine. `PC_FIXTURES` can still point
 /// at a folder of real files with the same name.
+#if canImport(ImageIO)
 public func fixtureURL(_ name: String) -> URL? {
     if let base = ProcessInfo.processInfo.environment["PC_FIXTURES"] {
         let u = URL(fileURLWithPath: base).appendingPathComponent(name)
@@ -128,3 +135,4 @@ private let syntheticFixture: URL? = {
     CGImageDestinationAddImage(dest, image, props as CFDictionary)
     return CGImageDestinationFinalize(dest) ? url : nil
 }()
+#endif

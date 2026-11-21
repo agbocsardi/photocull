@@ -1,3 +1,4 @@
+#if canImport(ImageIO)  // needs CoreGraphics + ImageIO
 import Foundation
 import CoreGraphics
 import ImageIO
@@ -157,3 +158,4 @@ func suiteEndToEnd() throws {
         "range dump folder holds the keeper JPG")
     checkEqual(Library.loadSessions(cfg: cfg2).count, 0, "both sidecar-only folders removed by finalize")
 }
+#endif

@@ -1,6 +1,12 @@
 import Foundation
-import CoreGraphics
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
+#if canImport(ImageIO)
+import CoreGraphics
+#endif
 
 // PreviewStore.swift — the remote-culling preview cache (docs/REMOTE-CULL.md §4).
 //
@@ -35,12 +41,16 @@ public enum PreviewError: Error, Equatable, CustomStringConvertible {
     case sourceUnreadable(String)
     /// ImageIO could not decode the source.
     case decodeFailed(String)
+    /// No cached preview exists and this platform cannot generate one.
+    case generationUnavailable(String)
 
     public var description: String {
         switch self {
         case .invalidComponent(let detail): return "Preview: invalid path component — \(detail)"
         case .sourceUnreadable(let path): return "Preview: cannot read source \(path)"
         case .decodeFailed(let path): return "Preview: cannot decode \(path)"
+        case .generationUnavailable(let stem):
+            return "Preview: \(stem) has no cached preview and this host cannot generate one"
         }
     }
 }
@@ -82,9 +92,15 @@ public enum PreviewStore {
             return Preview(url: previewURL, etag: stamp.etag)
         }
 
+        #if canImport(ImageIO)
         try fm.createDirectory(at: folder, withIntermediateDirectories: true)
         try generate(source: pair.jpg, to: previewURL, stamp: stamp, stampURL: stampURL)
         return Preview(url: previewURL, etag: stamp.etag)
+        #else
+        // Previews are rendered on the Mac and cached here; without ImageIO only
+        // an already cached preview (returned above) can be served.
+        throw PreviewError.generationUnavailable(pair.stem)
+        #endif
     }
 
     /// ETag the preview for `pair` carries right now, without generating it.
@@ -180,15 +196,27 @@ public enum PreviewStore {
         guard stat(url.path, &st) == 0, st.st_mode & S_IFMT == S_IFREG else {
             throw PreviewError.sourceUnreadable(url.path)
         }
-        let seconds = UInt64(max(st.st_mtimespec.tv_sec, 0))
-        let nanos = UInt64(max(st.st_mtimespec.tv_nsec, 0))
+        let mtime = modificationTime(st)
+        let seconds = UInt64(max(mtime.seconds, 0))
+        let nanos = UInt64(max(mtime.nanos, 0))
         // Wrapping arithmetic: only stability matters, and a nonsense timestamp
         // must not trap.
         return SourceStamp(size: UInt64(max(st.st_size, 0)),
                            mtimeNs: seconds &* 1_000_000_000 &+ nanos)
     }
 
+    /// Modification time in the spelling this platform's `stat` uses.
+    static func modificationTime(_ st: stat) -> (seconds: Int64, nanos: Int64) {
+        #if canImport(Darwin)
+        return (Int64(st.st_mtimespec.tv_sec), Int64(st.st_mtimespec.tv_nsec))
+        #else
+        return (Int64(st.st_mtim.tv_sec), Int64(st.st_mtim.tv_nsec))
+        #endif
+    }
+
     // MARK: - Rendering
+
+    #if canImport(ImageIO)
 
     /// Decode a 2048px orientation-corrected thumbnail, write it as sRGB JPEG to
     /// a temp file, rename it into place, then record the source stamp.
@@ -227,6 +255,8 @@ public enum PreviewStore {
         ctx.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
         return ctx.makeImage() ?? image
     }
+
+    #endif
 
     // MARK: - Per-path locks
 

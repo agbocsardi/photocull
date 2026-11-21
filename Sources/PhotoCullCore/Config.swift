@@ -1,5 +1,9 @@
 import Foundation
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 // Config.swift — reads/writes ~/.config/photocull/config.toml
 // Byte-compatible with the Go implementation's config format.
@@ -188,7 +192,7 @@ public struct PCConfig: Codable, Sendable, Equatable {
         }
         var data = Data(), buffer = [UInt8](repeating: 0, count: 4096)
         while true {
-            let count = Darwin.read(fd, &buffer, buffer.count)
+            let count = read(fd, &buffer, buffer.count)
             if count < 0 { if errno == EINTR { continue }; throw reject("Cannot read fixture config") }
             if count == 0 { break }
             data.append(contentsOf: buffer.prefix(count))
@@ -229,9 +233,16 @@ public struct PCConfig: Codable, Sendable, Equatable {
         }
         var after = stat()
         let visible = try inspect(path, directory: false)
-        guard fstat(fd, &after) == 0, after.st_dev == before.st_dev, after.st_ino == before.st_ino,
-              after.st_size == before.st_size, after.st_mtimespec.tv_sec == before.st_mtimespec.tv_sec,
-              after.st_mtimespec.tv_nsec == before.st_mtimespec.tv_nsec,
+        guard fstat(fd, &after) == 0 else { throw reject("Cannot stat fixture config") }
+        #if canImport(Darwin)
+        let sameTime = after.st_mtimespec.tv_sec == before.st_mtimespec.tv_sec
+            && after.st_mtimespec.tv_nsec == before.st_mtimespec.tv_nsec
+        #else
+        let sameTime = after.st_mtim.tv_sec == before.st_mtim.tv_sec
+            && after.st_mtim.tv_nsec == before.st_mtim.tv_nsec
+        #endif
+        guard after.st_dev == before.st_dev, after.st_ino == before.st_ino,
+              after.st_size == before.st_size, sameTime,
               visible.st_dev == before.st_dev, visible.st_ino == before.st_ino else { throw reject("Fixture config changed during validation") }
         return cfg
     }

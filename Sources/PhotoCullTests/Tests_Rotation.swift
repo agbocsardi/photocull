@@ -1,3 +1,4 @@
+#if canImport(ImageIO)  // needs CoreGraphics + ImageIO
 import Foundation
 import CoreGraphics
 import ImageIO
@@ -124,3 +125,4 @@ func suiteRotation() throws {
     check(fm.contentsEqual(atPath: src.path, andPath: outNone.path),
           "no edits → bytes copied unchanged")
 }
+#endif

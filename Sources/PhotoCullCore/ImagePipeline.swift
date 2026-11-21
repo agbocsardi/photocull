@@ -1,9 +1,11 @@
+#if canImport(ImageIO)
 import Foundation
 import CoreGraphics
 import ImageIO
 import UniformTypeIdentifiers
 
 // ImagePipeline.swift — decode, downsample, orient, crop, encode.
+// ImageIO-backed: macOS only. A host without it serves cached previews only.
 
 public enum ImagePipeline {
     /// Decode `url` downsampled so the longest edge is <= `maxPixel`,
@@ -282,3 +284,5 @@ public final class ImageCache: @unchecked Sendable {
     /// Cache key helper: "<path>|<maxPixel>".
     public static func key(url: URL, maxPixel: Int) -> String { "\(url.path)|\(maxPixel)" }
 }
+
+#endif

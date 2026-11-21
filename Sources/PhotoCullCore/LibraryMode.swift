@@ -1,5 +1,9 @@
 import Foundation
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
 // LibraryMode.swift — the data-safety gate, decided once at process start,
 // before any config is read or AppState exists.

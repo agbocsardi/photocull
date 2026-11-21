@@ -1,8 +1,46 @@
 import Foundation
+#if canImport(Darwin)
 import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
 
-// Darwin imports both struct flock and flock(2). Bind the existing BSD symbol explicitly.
+// Darwin and Glibc both import `struct flock` and flock(2). Bind the libc
+// symbol explicitly.
 @_silgen_name("flock") private func directoryFlock(_ fd: Int32, _ operation: Int32) -> Int32
+
+#if !canImport(Darwin)
+// Glibc's renameat2 has no declaration in the module map; bind it and its
+// RENAME_NOREPLACE flag (include/uapi/linux/fs.h) directly. This is the
+// exclusive rename the Darwin branch spells renameatx_np(RENAME_EXCL).
+@_silgen_name("renameat2") private func linuxRenameAt2(
+    _ fromFD: Int32, _ from: UnsafePointer<CChar>,
+    _ toFD: Int32, _ to: UnsafePointer<CChar>, _ flags: UInt32) -> Int32
+private let renameNoReplace: UInt32 = 1
+#endif
+
+/// Rename `from` inside `fromFD` to `to` inside `toFD`, failing when `to` exists.
+private func exclusiveRename(_ fromFD: Int32, _ from: String, _ toFD: Int32, _ to: String) -> Int32 {
+    #if canImport(Darwin)
+    return renameatx_np(fromFD, from, toFD, to, UInt32(RENAME_EXCL))
+    #else
+    return from.withCString { fromPtr in
+        to.withCString { toPtr in linuxRenameAt2(fromFD, fromPtr, toFD, toPtr, renameNoReplace) }
+    }
+    #endif
+}
+
+/// Kernel spelling of an open descriptor's path, or `fallback` when unavailable.
+private func descriptorPath(_ fd: Int32, fallback: String) -> String {
+    #if canImport(Darwin)
+    var bytes = [CChar](repeating: 0, count: Int(MAXPATHLEN))
+    return fcntl(fd, F_GETPATH, &bytes) == 0 ? String(cString: bytes) : fallback
+    #else
+    var bytes = [CChar](repeating: 0, count: Int(PATH_MAX))
+    let count = readlink("/proc/self/fd/\(fd)", &bytes, bytes.count - 1)
+    return count > 0 ? String(cString: bytes) : fallback
+    #endif
+}
 
 struct FinalizeSafetyError: LocalizedError {
     let message: String
@@ -23,8 +61,14 @@ func finalizePOSIX(_ action: String, code: Int32 = errno) -> Error {
 struct FinalizeIdentity: Codable, Equatable {
     let device: Int32, inode: UInt64, type: UInt16, size: Int64, seconds: Int64, nanos: Int64
     init(_ st: stat) {
+        #if canImport(Darwin)
         device = st.st_dev; inode = st.st_ino; type = st.st_mode & UInt16(S_IFMT)
         size = st.st_size; seconds = Int64(st.st_mtimespec.tv_sec); nanos = Int64(st.st_mtimespec.tv_nsec)
+        #else
+        device = Int32(truncatingIfNeeded: st.st_dev); inode = UInt64(st.st_ino)
+        type = UInt16(truncatingIfNeeded: st.st_mode & S_IFMT)
+        size = Int64(st.st_size); seconds = Int64(st.st_mtim.tv_sec); nanos = Int64(st.st_mtim.tv_nsec)
+        #endif
     }
     func sameObject(_ other: Self) -> Bool { device == other.device && inode == other.inode && type == other.type }
 }
@@ -41,7 +85,7 @@ final class FinalizeDirectory {
         var before = stat()
         guard lstat(url.path, &before) == 0 else { throw finalizePOSIX("lstat \(url.path)") }
         guard before.st_mode & S_IFMT == S_IFDIR else { throw FinalizeSafetyError("Not a real directory: \(url.path)") }
-        let opened = Darwin.open(url.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        let opened = open(url.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
         guard opened >= 0 else { throw finalizePOSIX("open \(url.path)") }
         var pinned = stat()
         guard fstat(opened, &pinned) == 0,
@@ -63,10 +107,7 @@ final class FinalizeDirectory {
         if locked { _ = directoryFlock(fd, LOCK_UN); locked = false }
     }
     deinit { releaseLock(); close(fd) }
-    var currentPath: String {
-        var bytes = [CChar](repeating: 0, count: Int(MAXPATHLEN))
-        return fcntl(fd, F_GETPATH, &bytes) == 0 ? String(cString: bytes) : url.path
-    }
+    var currentPath: String { descriptorPath(fd, fallback: url.path) }
     func verifyVisible() throws {
         var st = stat()
         guard lstat(url.path, &st) == 0, identity.sameObject(FinalizeIdentity(st)) else {
@@ -91,7 +132,7 @@ final class FinalizeDirectory {
     }
     func move(_ name: String, to destination: FinalizeDirectory, name newName: String) throws {
         try Self.basename(name); try Self.basename(newName)
-        guard renameatx_np(fd, name, destination.fd, newName, UInt32(RENAME_EXCL)) == 0 else {
+        guard exclusiveRename(fd, name, destination.fd, newName) == 0 else {
             throw finalizePOSIX("exclusive rename \(currentPath)/\(name) -> \(destination.currentPath)/\(newName)")
         }
     }
@@ -135,7 +176,7 @@ struct FinalizeSidecar: Equatable {
         guard fstat(fd, &st) == 0, FinalizeIdentity(st) == expected else { throw FinalizeSafetyError("Sidecar replaced while opening") }
         var data = Data(), buffer = [UInt8](repeating: 0, count: 8192)
         while true {
-            let count = Darwin.read(fd, &buffer, buffer.count)
+            let count = read(fd, &buffer, buffer.count)
             if count < 0 { if errno == EINTR { continue }; throw finalizePOSIX("read sidecar") }
             if count == 0 { break }
             data.append(contentsOf: buffer.prefix(count))
@@ -209,7 +250,7 @@ final class FinalizeRecovery {
         try data.withUnsafeBytes { bytes in
             var offset = 0
             while offset < bytes.count {
-                let n = Darwin.write(progressFD, bytes.baseAddress!.advanced(by: offset), bytes.count - offset)
+                let n = write(progressFD, bytes.baseAddress!.advanced(by: offset), bytes.count - offset)
                 if n < 0 { if errno == EINTR { continue }; throw finalizePOSIX("write progress journal") }
                 guard n > 0 else { throw FinalizeSafetyError("Short progress write") }
                 offset += n
@@ -218,8 +259,7 @@ final class FinalizeRecovery {
         guard fsync(progressFD) == 0 else { throw finalizePOSIX("sync progress journal") }
     }
     var currentPath: String {
-        var bytes = [CChar](repeating: 0, count: Int(MAXPATHLEN))
-        return fcntl(fd, F_GETPATH, &bytes) == 0 ? String(cString: bytes) : directory.url.appendingPathComponent(Self.name).path
+        descriptorPath(fd, fallback: directory.url.appendingPathComponent(Self.name).path)
     }
     func removeOwned() throws {
         try directory.verifyVisible(); try claims.verifyVisible()
